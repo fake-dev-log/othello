@@ -72,7 +72,7 @@ function minimize(currentState: State[], player: Player, depth: number): number 
     for (let idx=0; idx < 64; idx++) {
         const possibleState: State[] | null = validateAndFlip(currentState, idx, opponent);
         if (possibleState !== null) {
-            const value = maximize(possibleState, opponent, depth + 1);
+            const value = maximize(possibleState, player, depth + 1);
             minValue = Math.min(value, minValue);
         }
     }
