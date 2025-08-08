@@ -1,10 +1,27 @@
-import { DEPTH_BOUND } from "../constants";
+import { DEPTH_BOUND, POSITIONAL_WEIGHTS } from "../constants";
 import { calculateScore, shouldPass, validateAndFlip } from "../logics";
 import type { Player, State } from "../tyeps";
 
-function maximize(currentState: State[], player: Player, depth: number): number {
+function evaluateBoard(board: State[], player: Player): number {
     const opponent = player === 'b' ? 'w' : 'b';
-    
+
+    let playerScore = 0;
+    let opponentScore = 0;
+
+    for (let i = 0; i < 64; i++) {
+        if (board[i] === player) {
+          playerScore += POSITIONAL_WEIGHTS[i];
+        } else if (board[i] === opponent) {
+          opponentScore += POSITIONAL_WEIGHTS[i];
+        }
+    }
+
+    return playerScore - opponentScore;
+}
+
+function evaluate(currentState: State[], player: Player, depth: number): number | null {
+    const opponent = player === 'b' ? 'w' : 'b';
+
     const { black, white } = calculateScore(currentState);
     const playerScore = player === 'b' ? black : white;
     const opponentScore = opponent === 'b' ? black : white;
@@ -25,7 +42,17 @@ function maximize(currentState: State[], player: Player, depth: number): number 
     }
 
     if (depth >= DEPTH_BOUND) {
-        return playerScore;
+        return evaluateBoard(currentState, player);
+    }
+
+    return null;
+}
+
+function maximize(currentState: State[], player: Player, depth: number): number {
+    const evaluated = evaluate(currentState, player, depth);
+
+    if (evaluated !== null) {
+        return evaluated;
     }
 
     let maxValue = -Infinity;
@@ -42,31 +69,13 @@ function maximize(currentState: State[], player: Player, depth: number): number 
 }
 
 function minimize(currentState: State[], player: Player, depth: number): number {
+    const evaluated = evaluate(currentState, player, depth);
+
+    if (evaluated !== null) {
+        return evaluated;
+    }
+
     const opponent = player === 'b' ? 'w' : 'b';
-    
-    const { black, white } = calculateScore(currentState);
-    const playerScore = player === 'b' ? black : white;
-    const opponentScore = opponent === 'b' ? black : white;
-
-    const playerPass = shouldPass(currentState, player);
-    const opponentPass = shouldPass(currentState, opponent);
-
-    const isGameOver = (black + white === 64) || (playerPass && opponentPass);
-
-    if (isGameOver) {
-        if (playerScore > opponentScore) {
-            return Infinity;
-        } else if (opponentScore > playerScore) {
-            return -Infinity;
-        } else {
-            return 32;
-        }
-    }
-
-    if (depth >= DEPTH_BOUND) {
-        return playerScore;
-    }
-
     let minValue = Infinity;
 
     for (let idx=0; idx < 64; idx++) {
