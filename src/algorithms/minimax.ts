@@ -1,6 +1,6 @@
-import { DEPTH_BOUND } from "../constants";
-import { calculateScore, shouldPass, validateAndFlip } from "../logics";
-import type { Player, State } from "../tyeps";
+import { DEPTH_BOUND } from "../constants/index";
+import { calculateScore, shouldPass, validateAndFlip } from "../logics/index";
+import type { Player, State } from "../tyeps/index";
 import {evaluateBoard} from "./enhancedEvaluation";
 
 function evaluate(currentState: State[], player: Player, depth: number, enhanced: boolean = false): number | null {

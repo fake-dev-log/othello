@@ -1,5 +1,5 @@
-import type { Player, State } from "../tyeps";
-import {POSITIONAL_WEIGHT} from "../constants";
+import type { Player, State } from "../tyeps/index";
+import {POSITIONAL_WEIGHT} from "../constants/index";
 
 export function evaluateBoard(board: State[], player: Player): number {
     const opponent = player === 'b' ? 'w' : 'b';

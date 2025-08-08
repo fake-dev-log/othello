@@ -1,5 +1,5 @@
-import { DIRECTIONS } from "../constants";
-import type { Player, ScoreBoard, State, Winner } from "../tyeps";
+import { DIRECTIONS } from "../constants/index";
+import type { Player, ScoreBoard, State, Winner } from "../tyeps/index";
 
 export function validateAndFlip(board: State[], idx: number, player: Player): State[] | null {
     if (idx < 0 || idx >= 64 || board[idx]) {

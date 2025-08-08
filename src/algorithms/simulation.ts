@@ -1,67 +1,70 @@
-import {INITIAL_SQUARES} from "../constants";
-import {calculateScore, shouldPass, validateAndFlip} from "../logics";
+import {INITIAL_SQUARES} from "../constants/index";
+import {calculateScore, shouldPass, validateAndFlip} from "../logics/index";
+import type { Player, State } from "../tyeps/index";
 import {minimax} from "./minimax";
 
 console.log(`Minimax simulation started.`);
 
-const minimaxWin = { b: 0, w: 0 };
-const enhancedWin = { b: 0, w: 0 };
-let draw = 0;
+let simpleAiWins = 0;
+let enhancedAiWins = 0;
+let draws = 0;
+const TOTAL_GAMES = 30;
 
-for (let i = 0; i < 30; i++) {
-    console.log(`Game ${i+1} started.`)
-    const player = Math.random() > 0.5 ? 'b' :'w';
-    const opponent = player === 'b' ? 'w' : 'b';
+for (let i = 0; i < TOTAL_GAMES; i++) {
+    console.log(`\n--- Game ${i + 1} / ${TOTAL_GAMES} ---`);
 
-    let board = INITIAL_SQUARES;
-    let isGameOver = false;
-    let move = 0;
+    const enhancedAiPlayer: Player = i % 2 === 0 ? 'b' : 'w';
+    const simpleAiPlayer: Player = i % 2 === 0 ? 'w' : 'b';
+    console.log(`Simple AI: ${simpleAiPlayer.toUpperCase()}, Enhanced AI: ${enhancedAiPlayer.toUpperCase()}`);
 
-    while (!isGameOver) {
-        const playerShouldPass = shouldPass(board, player);
-        const opponentShouldPass = shouldPass(board, opponent);
+    let board: State[] = [...INITIAL_SQUARES];
+    let currentTurn: Player = 'b';
+    let moveCount = 0;
 
+    while (true) {
         const { black, white } = calculateScore(board);
-
-        if ((playerShouldPass && opponentShouldPass) || black + white === 64) {
-            console.log(`Game ${i+1} ended.`)
-            const playerScore = player === 'b' ? black : white;
-            const opponentScore = opponent === 'b' ? black : white;
-
-            if (playerScore > opponentScore) {
-                minimaxWin[player]++;
-                console.log(`Minimax ${player} wins.`)
-            } else if (opponentScore > playerScore) {
-                enhancedWin[opponent]++;
-                console.log(`Enhanced ${opponent} wins.`)
+        if (black + white === 64 || (shouldPass(board, 'b') && shouldPass(board, 'w'))) {
+            console.log(`Game ended at move ${moveCount}.`);
+            if (black > white) {
+                if (enhancedAiPlayer === 'b') enhancedAiWins++;
+                else simpleAiWins++;
+                console.log(`Winner: Black (${black} vs ${white})`);
+            } else if (white > black) {
+                if (enhancedAiPlayer === 'w') enhancedAiWins++;
+                else simpleAiWins++;
+                console.log(`Winner: White (${white} vs ${black})`);
             } else {
-                draw++;
-                console.log(`Draw - Minimax ${player} ${playerScore} : Enhanced ${opponent} ${opponentScore}`)
+                draws++;
+                console.log(`Draw (${black} vs ${white})`);
             }
-            isGameOver = true;
             break;
         }
 
-        const isPlayerTurn = (player === 'b' && move % 2 === 0) || (player === 'w' && move % 2 !== 0);
-        if (isPlayerTurn && !playerShouldPass) {
-            const idx = minimax(board, player);
-            const newBoard = validateAndFlip(board, idx, player);
-            if (newBoard !== null) {
-                board = newBoard;
-            }
-        } else if (!isPlayerTurn && !opponentShouldPass) {
-            const idx = minimax(board, opponent, true);
-            const newBoard = validateAndFlip(board, idx, opponent);
-            if (newBoard !== null) {
-                board = newBoard;
-            }
+        if (shouldPass(board, currentTurn)) {
+            currentTurn = currentTurn === 'b' ? 'w' : 'b';
+            continue;
         }
-        move++;
+
+        let bestMove: number;
+        if (currentTurn === simpleAiPlayer) {
+            bestMove = minimax(board, simpleAiPlayer, false);
+        } else {
+            bestMove = minimax(board, enhancedAiPlayer, true);
+        }
+
+        if (bestMove !== -1) {
+            board = validateAndFlip(board, bestMove, currentTurn)!;
+        } else {
+            console.error("Error: minimax returned -1 despite not having to pass.");
+            break; 
+        }
+
+        currentTurn = currentTurn === 'b' ? 'w' : 'b';
+        moveCount++;
     }
 }
 
-console.log(`Minimax simulation ended`);
-console.log();
-console.log(`Minimax wins: ${minimaxWin}`);
-console.log(`Enhanced wins: ${enhancedWin}`);
-console.log(`Draw: ${draw}`);
+console.log(`\n--- Minimax Simulation Ended ---`);
+console.log(`Simple AI Wins: ${simpleAiWins}`);
+console.log(`Enhanced AI Wins: ${enhancedAiWins}`);
+console.log(`Draws: ${draws}`);
