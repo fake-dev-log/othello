@@ -1,8 +1,8 @@
 # 오셀로(Othello) AI
 
-## [Click to play](https://fake-dev-log.github.io/othello/)
-
 ![Othello Game](./images/othello.png)
+
+## [Click to play](https://fake-dev-log.github.io/othello/)
 
 ## 게임규칙
 
@@ -144,7 +144,6 @@ function minimize(currentState: State[], player: Player, depth: number): number 
     const possibleState: State[] | null = validateAndFlip(currentState, idx, opponent);
     // 상대가 착수할 수 있는 지점이 있는 경우,
     if (possibleState !== null) {
-      // 해당 
       // 해당 착수에 대한 AI의 반응에 따른 보상 극대화를 고려하여 착수 지점의 보상을 계산한다.
       const value = maximize(possibleState, player, depth + 1);
       // 최소보상 갱신
@@ -209,7 +208,7 @@ function minimax(currentState: State[], player: Player): number {
 
 ### 3. 알파-베타 가지치기
 
-이전의 삼목게임(tic-tac-toe)의 예에서 볼 수 있듯, 알파-베타 가지치기를 통해 탐색량을 크게 줄일 수 있다.
+이전의 [삼목게임(tic-tac-toe)](https://github.com/fake-dev-log/minimax_machine)의 예에서 볼 수 있듯, 알파-베타 가지치기를 통해 탐색량을 크게 줄일 수 있다.
 
 탐색량이 줄어든다면 동일한 시간동안 더 깊은 탐색이 가능하므로 더 좋은 선택을 할 수 있게 된다.
 
