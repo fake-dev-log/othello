@@ -75,6 +75,14 @@ export default function Game() {
         }
     }, [aiPlayer, handlePlay])
 
+    const playOpponent = useCallback((board: State[]) => {
+        const bestMove = minimax(board, aiPlayer === 'b' ? 'w' : 'b', true);
+
+        if (bestMove !== -1) {
+            handlePlay(bestMove);
+        }
+    }, [aiPlayer, handlePlay])
+
     function restart() {
         setHistory([INITIAL_SQUARES]);
         setCurrentMove(0);
@@ -87,10 +95,15 @@ export default function Game() {
         if (!isGameOver && aiPlayer === turn) {
             const aiTimeout = setTimeout(() => {
                 playAI(currentSquares);
-            }, 1000);
+            }, 500);
             return () => clearTimeout(aiTimeout)
+        } else if (!isGameOver && aiPlayer !== turn) {
+            const enhancedTimeout = setTimeout(() => {
+                playOpponent(currentSquares);
+            }, 500)
+            return () => clearTimeout(enhancedTimeout)
         }
-    }, [aiPlayer, currentSquares, isGameOver, playAI, turn])
+    }, [aiPlayer, currentSquares, isGameOver, playAI, playOpponent, turn])
 
     return (
         <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center font-sans p-4">
