@@ -1,23 +1,6 @@
-import { DEPTH_BOUND, POSITIONAL_WEIGHTS } from "../constants";
-import { calculateScore, shouldPass, validateAndFlip } from "../logics";
+import { DEPTH_BOUND } from "../constants";
+import { calculateScore, evaluateBoard, shouldPass, validateAndFlip } from "../logics";
 import type { Player, State } from "../tyeps";
-
-function evaluateBoard(board: State[], player: Player): number {
-    const opponent = player === 'b' ? 'w' : 'b';
-
-    let playerScore = 0;
-    let opponentScore = 0;
-
-    for (let i = 0; i < 64; i++) {
-        if (board[i] === player) {
-          playerScore += POSITIONAL_WEIGHTS[i];
-        } else if (board[i] === opponent) {
-          opponentScore += POSITIONAL_WEIGHTS[i];
-        }
-    }
-
-    return playerScore - opponentScore;
-}
 
 function evaluate(currentState: State[], player: Player, depth: number): number | null {
     const opponent = player === 'b' ? 'w' : 'b';

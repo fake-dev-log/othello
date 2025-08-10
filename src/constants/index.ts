@@ -17,7 +17,7 @@ const POSITIONAL_WEIGHTS = [
 
 const DIRECTIONS = [-9, -8, -7, -1, 1, 7, 8, 9];
 
-const DEPTH_BOUND = 4;
+const DEPTH_BOUND = 7;
 
 export {
     INITIAL_SQUARES,

@@ -14,6 +14,8 @@
 
 6. [Version 2. 위치 가중치 맵 적용](#version-2-위치-가중치-맵positional-weight-map-적용)
 
+7. [Version 3. 알파-베타 가지치기($\alpha$-$\beta$ pruning) 적용](#version-3-알파-베타-가지치기--pruning-적용)
+
 ## 프로젝트 개요
 
 이 프로젝트는 React와 TypeScript를 사용하여 만든 오셀로(리버시) 게임으로, Minimax 알고리즘을 기반으로 한 인공지능(AI)의 다양한 전략과 최적화 기법을 탐구한다.
@@ -440,3 +442,174 @@ const RESEARCH_BASED_POSITIONAL_WEIGHTS = [
 [^3]: [Van Der Ree, Michiel, and Marco Wiering. "Reinforcement learning in the game of Othello: Learning against a fixed opponent and learning from self-play." 2013 IEEE symposium on adaptive dynamic programming and reinforcement learning (ADPRL). IEEE, 2013.](https://www.ai.rug.nl/~mwiering/GROUP/ARTICLES/paper-othello.pdf)
 
 [^4]: Yoshioka, Taku, Shin Ishii, and Minoru Ito. "Strategy acquisition for the game." IEICE TRANSACTIONS on Information and Systems 82.12 (1999): 1618-1626.
+
+## Version 3. 알파-베타 가지치기($\alpha$-$\beta$ pruning) 적용
+
+### 1. Version 2의 한계와 최적화의 필요성
+
+Version 2에서는 위치 가중치 맵을 통해 AI의 평가 함수를 크게 [개선했다](#4-종합-결론-및-한계). 이를 통해 AI는 더 전략적인 판단을 내릴 수 있게 되었으나, 순수 Minimax 탐색 방식의 근본적인 한계에 부딪혓다. 탐색 깊이가 깊어질수록 탐색해야 할 노드의 수가 기하급수적으로 증가하여 실시간 게임에 적용하기 어려울 만큼 계산량이 많고 시간이 오래 걸렸다.
+
+따라서 이번 버전의 목표는 개선한 평가 함수를 실시간으로 활용할 수 있도록 알파-베타 가지치기($\alpha$-$\beta$ pruning) 기법을 적용하여 탐색 알고리즘을 최적화 하는 것이다.
+
+### 2. 알파-베타 가지치기의 원리
+
+[삼목 게임 프로젝트](https://github.com/fake-dev-log/minimax_machine?tab=readme-ov-file#2-%EC%95%8C%EA%B3%A0%EB%A6%AC%EC%A6%98-%EA%B0%9C%EC%9A%94)에서 기술하였듯, 알파-베타 가지치기의 핵심은 결과에 영향을 주지 않을 것이 명백한 가지(branch)를 평가하지 않고 잘라내는 것이다. 즉, 특정 분기를 탐색하던 중 이전에 발견한 수보다 나쁜 결과로 이어질 것이 확실해지면 해당 분기의 나머지 탐색을 즉시 중단한다. 이를 통해 불필요한 계산을 크게 줄여 동일한 시간 동안 더 깊은 수를 탐색할 수 있게 한다.
+
+<details>
+<summary> 알파-베타 가지치기 코드 보기(Click to expand) </summary>
+
+```typescript
+// 이전의 maximize 및 minimize 함수는 반복되는 코드를 공유하고 있었다.
+// negamax를 참고하여 재귀적으로 호출하는 단일 함수로 리팩토링 하였다.
+function minimaxABRecursive(
+    board: State[],
+    player: Player,
+    depth: number,
+    alpha: number,
+    beta: number,
+    maximizingPlayer: Player
+): number {
+    const { black, white } = calculateScore(board);
+    const blackPass = shouldPass(board, 'b');
+    const whitePass = shouldPass(board, 'w');
+
+    // 탐색 종료 조건: 깊이 도달 또는 게임 종료
+    if (depth === 0 || black + white === 64 || (blackPass && whitePass)) {
+        return evaluateBoard(board, maximizingPlayer);
+    }
+
+    const opponent = player === 'b' ? 'w' : 'b';
+
+    //현재 플레이어가 둘 곳이 없다면 턴을 넘겨서 계속 탐색한다.
+    if (shouldPass(board, player)) {
+        return minimaxABRecursive(board, opponent, depth - 1, alpha, beta, maximizingPlayer);
+    }
+
+    // 현재 탐색이 최대화 노드인지 판단한다.
+    const isMaximizigPlayer = player === maximizingPlayer;
+    let bestValue = isMaximizigPlayer ? -Infinity : Infinity;
+
+    for (let idx = 0; idx < 64; idx++) {
+        const nextBoard = validateAndFlip(board, idx, player);
+        if (nextBoard) {
+            const value = minimaxABRecursive(nextBoard, opponent, depth - 1, alpha, beta, maximizingPlayer);
+
+            if (isMaximizigPlayer) {
+                // 최대화 노드: 더 좋은 수를 찾으면 알파를 갱신한다.
+                bestValue = Math.max(bestValue, value);
+                alpha = Math.max(alpha, bestValue);
+                // 가지치기 조건: 이 분기에서는 현재까지 찾은 최선의 수보다
+                // 더 좋은 결과를 얻을 수 없음이 확정된다.
+                if (beta <= alpha) {
+                    break;
+                }
+            } else {
+                // 최소화 노드: 상대방의 더 좋은 수를 찾으면 베타 값을 갱신한다. 
+                bestValue = Math.min(bestValue, value);
+                beta = Math.min(beta, bestValue);
+                // 가지치기
+                if (beta <= alpha) {
+                    break;
+                }
+            }
+        }
+    }
+
+    return bestValue;
+}
+```
+
+```typescript
+// 최적의 수를 찾아내는 함수
+function findBestMove(board: State[], player: Player): number {
+    // 알파, 베타 및 착수점 초기화
+    let alpha = -Infinity;
+    const beta = Infinity;
+    let bestMove = -1;
+
+    // 추후 이 부분에서 Move Ordering을 적용하여 최적화 할 수 있다.
+    const possibleMoves: { move: number, states: State[] }[] = [];
+    for (let idx = 0; idx < 64; idx++) {
+        const states = validateAndFlip(board, idx, player)
+        if (states) {
+            possibleMoves.push({
+              move: idx,
+              states: states
+            });
+        }
+    }
+
+    if (possibleMoves.length === 0) {
+        return -1;
+    }
+
+    const opponent = player === 'b' ? 'w' : 'b';
+
+    // 가능한 모든 수에 대해 탐색을 시작한다.
+    for (const { move, states } of possibleMoves) {
+        const value = minimaxABRecursive(states, opponent, DEPTH_BOUND, alpha, beta, player);
+
+        // 최상위(root) 탐색은 항상 최대화 탐색이므로, 더 좋은 수를 찾으면 알파와 최적 착수점을 갱신한다.
+        if (value > alpha) {
+            alpha = value;
+            bestMove = move;
+        }
+    }
+
+    // 만약 유효한 수를 찾지 못했다면, 가능한 첫번째 수를 둔다.
+    if (bestMove === -1) {
+        return possibleMoves[0].move;
+    }
+
+    // 최적의 착수점 반환
+    return bestMove;
+}
+```
+
+</details>
+
+### 3. 시뮬레이션 결과 및 분석
+
+알파-베타 가지치기가 적용된 AI를 사용하여, AI가 스스로를 상대하는 시뮬레이션을 탐색 깊이 3부터 9까지 진행하였다.
+
+#### 가. 주요 지표 요약
+
+|탐색 깊이|승자|최종 점수|흑 평균 탐색 노드|백 평균 탐색 노드|흑 평균 탐색 시간(초)| 백 평균 탐색 시간(초)|
+|:---|:---|:---|:---|:---|:---|:---|
+|3|흑|45 vs 19|1,289|1,262|0.004|0.004|
+|4|흑|39 vs 25|4,631|4,628|0.013|0.013|
+|5|흑|42 vs 22|20,127|19,892|0.053|0.055|
+|6|백|30 vs 34|119,032|139,211|0.327|0.382|
+|7|백|15 vs 49|258,919|285,770|0.685|0.771|
+|8|백|29 vs 35|656,178|1,192,426|1.871|3.303|
+|9|흑|36 vs 28|4,475,585|4,564,706|11.834|12.483|
+
+#### 나. 분석: 깊이에 따른 전략적 변곡점의 발견
+
+이번 시뮬레이션에서 가장 흥미로운 점은 탐색 깊이에 따라 승자가 역전과 재역전을 반복했다는 사실이다.
+
+- 얕은 탐색 (Depth 3-5): 흑(선공)의 우세
+
+  이 단계에서 AI는 근시안적인 최적화에 집중한다. 흑은 초반의 주도권을 활용하여 유리한 고지를 점하고 승리한다.
+
+- 중간 깊이 탐색 (Depth 6-8): 백(후공)의 반격과 승리
+
+  탐색 깊이가 깊어지자 AI는 더 넓은 시야를 갖게 된다. 백은 흑의 초반 공세를 받아넘긴 후, 게임 중반부터 후공의 이점을 살려 판세를 뒤집는 장기적인 전략을 찾아낸다. 이는 깊이 5까지의 AI가 예측하지 못한 대응 전략의 발견으로 볼 수 있다.
+
+- 깊은 탐색 (Depth 9): 흑(선공)의 재역전
+
+  탐색 깊이 9에 도달하자, 흑은 다시 승자의 자리를 되찾았다. 이는 흑 AI가 이제 백의 중반 카운터 전략까지 예측하고, 이를 무력화시키는 더 깊은 수준의 장기 포석을 찾아냈음을 의미한다다. 즉, 대응 전략에 대한 대응 전략을 구사하는 것이다.
+
+이러한 승자의 변화는 게임 AI에서 탐색 깊이가 단순히 더 좋은 수를 찾는 것을 넘어, 게임을 이해하는 '전략적 지평(Strategic Horizon)' 자체를 바꾼다는 것을 보여준다.
+
+#### 다. 활용
+
+현재 게임에서는 시간 제한을 두고 있지 않지만, 실시간 게임에서 사용자의 착수에 대응해 5초 이내로 반응하는 것이 사용자 경험 측면에서 바람직하다고 판단했다. 만약 이보다 오랜 시간이 걸리는 상황에서 계산 중이라는 표시가 없다면 사용자가 시스템의 오류로 오인할 수 있기 때문이다.
+
+시뮬레이션 결과, 탐색 깊이 7에서 가장 긴 탐색 시간(Longest Search Time)이 2초 내외로 기록되었다. 이는 백의 대응 전략을 활용할 수 있는 충분한 깊이이면서도 쾌적한 사용자 경험을 제공할 수 있는 절충안이다. 따라서 실제 게임에는 탐색 깊이 7을 적용하기로 결정했다.
+
+### 4. 종합 결론 및 다음 과제
+
+Version 3를 통해 알파-베타 가지치기를 성공적으로 적용하여 탐색 효율을 높일 수 있었다. 이에 따라 이전에는 불가능했던 깊이 9까지의 분석을 수행할 수 있었다. 그 결과, 탐색 깊이에 따라 AI의 게임 운영 전략이 질적으로 변화하며 승패가 뒤바뀌는 양상을 확인할 수 있었다.
+
+하지만 여전히 탐색 성능을 개선할 여지가 남아있다. 알파-베타 가지치기의 효율은 어떤 수를 먼저 탐색하는지에 따라 크게 달라진다다. 다음 Version 4에서는 유망한 수를 먼저 탐색하여 가지치기 효율을 더욱 극대화하는 무브 오더링(Move Ordering) 기법을 적용하여 AI의 탐색 효율을 한 단계 더 높일 것이다.

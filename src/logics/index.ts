@@ -1,4 +1,4 @@
-import { DIRECTIONS } from "../constants";
+import { DIRECTIONS, POSITIONAL_WEIGHTS } from "../constants";
 import type { Player, ScoreBoard, State, Winner } from "../tyeps";
 
 export function validateAndFlip(board: State[], idx: number, player: Player): State[] | null {
@@ -67,4 +67,21 @@ export function determineWinner(score: ScoreBoard): Winner {
     if (score.black > score.white) return 'Black';
     if (score.white > score.black) return 'White';
     return 'Draw';
+}
+
+export function evaluateBoard(board: State[], player: Player): number {
+    const opponent = player === 'b' ? 'w' : 'b';
+
+    let playerScore = 0;
+    let opponentScore = 0;
+
+    for (let i = 0; i < 64; i++) {
+        if (board[i] === player) {
+          playerScore += POSITIONAL_WEIGHTS[i];
+        } else if (board[i] === opponent) {
+          opponentScore += POSITIONAL_WEIGHTS[i];
+        }
+    }
+
+    return playerScore - opponentScore;
 }
