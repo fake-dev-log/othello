@@ -20,24 +20,36 @@
 
 ## 기술스택
 
-<div style="display: flex; gap: 1rem;">
-  <div style="display: flex-col; justify-items: center;"> 
-    <img height=50 src="./images/react.svg" />
-    <p>React</p>
-  </div>
-  <div style="display: flex-col; justify-items: center;"> 
-    <img height=50 src="./images/typescript.svg" />
-    <p>TypeScript</p>
-  </div>
-  <div style="display: flex-col; justify-items: center;"> 
-    <img height=50 src="./images/vite.svg" />
-    <p>Vite</p>
-  </div>
-  <div style="display: flex-col; justify-items: center;"> 
-    <img height=50 src="./images/tailwind_css.svg" />
-    <p>Tailwind CSS</p>
-  </div>
-</div>
+<table style="text-align: center">
+  <tr>
+    <td>
+      <img height=50 src="./images/react.svg" />
+    </td>
+    <td>
+      <img height=50 src="./images/typescript.svg" />
+    </td>
+    <td>
+      <img height=50 src="./images/vite.svg" />
+    </td>
+    <td>
+      <img height=50 src="./images/tailwind_css.svg" />
+    </td>
+  </tr>
+  <tr>
+    <td>
+      React
+    </td>
+    <td>
+      TypeScript
+    </td>
+    <td>
+      Vite
+    </td>
+    <td>
+      Tailwind CSS
+    </td>
+  </tr>
+</table>
 
 ## 게임 화면
 
