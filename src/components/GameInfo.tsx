@@ -1,4 +1,4 @@
-import type { Player, ScoreBoard, Winner } from "../tyeps";
+import type { Player, ScoreBoard, Winner } from "../types";
 
 export function GameInfo({ turn, scoreBoard, winner, message, restart }: { turn: Player, scoreBoard: ScoreBoard, winner: Winner | null, message: string, restart: () => void }) {
     const isBlackTurn = turn === 'b';

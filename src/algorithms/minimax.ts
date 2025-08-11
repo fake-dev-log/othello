@@ -1,6 +1,6 @@
 import { DEPTH_BOUND } from "../constants";
 import { calculateScore, evaluateBoard, shouldPass, validateAndFlip } from "../logics";
-import type { Player, State } from "../tyeps";
+import type { Player, State } from "../types";
 
 function evaluate(currentState: State[], player: Player, depth: number): number | null {
     const opponent = player === 'b' ? 'w' : 'b';

@@ -1,4 +1,4 @@
-import type { State } from "../tyeps";
+import type { State } from "../types";
 import Square from "./Square";
 
 export function Board({ squares, onPlay, disabled }: { squares: State[], onPlay: (idx: number) => void, disabled: boolean }) {

@@ -1,6 +1,6 @@
 import { DEPTH_BOUND } from "../constants";
 import { calculateScore, evaluateBoard, shouldPass, validateAndFlip } from "../logics";
-import type {State, Player} from "../tyeps"
+import type {State, Player} from "../types"
 
 function minimaxABRecursive(
     board: State[],
@@ -23,15 +23,15 @@ function minimaxABRecursive(
         return minimaxABRecursive(board, opponent, depth - 1, alpha, beta, maximizingPlayer);
     }
 
-    const isMaximizigPlayer = player === maximizingPlayer;
-    let bestValue = isMaximizigPlayer ? -Infinity : Infinity;
+    const isMaximizingPlayer = player === maximizingPlayer;
+    let bestValue = isMaximizingPlayer ? -Infinity : Infinity;
 
     for (let idx = 0; idx < 64; idx++) {
         const nextBoard = validateAndFlip(board, idx, player);
         if (nextBoard) {
             const value = minimaxABRecursive(nextBoard, opponent, depth - 1, alpha, beta, maximizingPlayer);
 
-            if (isMaximizigPlayer) {
+            if (isMaximizingPlayer) {
                 bestValue = Math.max(bestValue, value);
                 alpha = Math.max(alpha, bestValue);
                 if (beta <= alpha) {
@@ -72,6 +72,10 @@ export function findBestMove(board: State[], player: Player): number {
     }
 
     const opponent = player === 'b' ? 'w' : 'b';
+
+    const moveValueMap: { [move: number]: number } = {};
+    possibleMoves.forEach(({ move, states}) => moveValueMap[move] = minimaxABRecursive(states, opponent, 3, alpha, beta, player));
+    possibleMoves.sort((a, b) => moveValueMap[b.move] - moveValueMap[a.move]);
 
     for (const { move, states } of possibleMoves) {
         const value = minimaxABRecursive(states, opponent, DEPTH_BOUND, alpha, beta, player);

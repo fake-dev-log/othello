@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Board } from "./Board";
-import type { ScoreBoard, Player, State, Winner } from "../tyeps";
+import type { ScoreBoard, Player, State, Winner } from "../types";
 import { calculateScore, determineWinner, shouldPass, validateAndFlip } from "../logics";
 import { INITIAL_SQUARES } from "../constants";
 import { GameInfo } from "./GameInfo";

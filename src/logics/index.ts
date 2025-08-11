@@ -1,5 +1,5 @@
 import { DIRECTIONS, POSITIONAL_WEIGHTS } from "../constants";
-import type { Player, ScoreBoard, State, Winner } from "../tyeps";
+import type { Player, ScoreBoard, State, Winner } from "../types";
 
 export function validateAndFlip(board: State[], idx: number, player: Player): State[] | null {
     if (idx < 0 || idx >= 64 || board[idx]) {

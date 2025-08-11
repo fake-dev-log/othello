@@ -1,5 +1,5 @@
 import { usePrevious } from "../hooks";
-import type { State } from "../tyeps";
+import type { State } from "../types";
 
 export default function Square({ value, onSquareClick, disabled }: { value: State, onSquareClick: () => void, disabled: boolean}) {
     const prevValue = usePrevious(value);
