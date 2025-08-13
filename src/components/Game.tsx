@@ -4,7 +4,7 @@ import type { ScoreBoard, Player, State, Winner } from "../tyeps";
 import { calculateScore, determineWinner, shouldPass, validateAndFlip } from "../logics";
 import { INITIAL_SQUARES } from "../constants";
 import { GameInfo } from "./GameInfo";
-import { findBestMove } from "../algorithms/abPruning";
+import { mcts } from "../algorithms/mcts";
 
 export default function Game() {
     const [ history, setHistory ] = useState<State[][]>([INITIAL_SQUARES]);
@@ -68,9 +68,9 @@ export default function Game() {
     }, [currentMove, currentSquares, history, isGameOver, turn]);
 
     const playAI = useCallback((board: State[]) => {
-        const bestMove = findBestMove(board, aiPlayer);
-                
-        if (bestMove !== -1) {
+        const bestMove = mcts(board, aiPlayer);
+        
+        if (bestMove !== null) {
             handlePlay(bestMove);
         }
     }, [aiPlayer, handlePlay])
