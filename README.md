@@ -793,7 +793,9 @@ function findBestMove(board: State[], player: Player, start: number): number | n
       if (node.children.length === 0) {
         node.children = findNextChildren(node);
       }
-      node = node.children[0]; // 첫 번째 자식으로 이동
+      if (node.children.length > 0) {
+        node = node.children[0]; // 첫 번째 자식으로 이동
+      }
     }
   }
   

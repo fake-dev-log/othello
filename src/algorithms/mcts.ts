@@ -132,7 +132,9 @@ export function findBestMove(board: State[], player: Player, start: number): num
                 if (node.children.length === 0) {
                     node.children = findNextChildren(node);
                 }
-                node = node.children[0];
+                if (node.children.length > 0) {
+                    node = node.children[0];
+                }
             }
         }
         const value = rollout(node);
