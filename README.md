@@ -18,6 +18,8 @@
 
 8. [Version 4. 무브 오더링(Move Ordering)을 통한 탐색 가속](#version-4-무브-오더링move-ordering을-통한-탐색-가속)
 
+9. [Version 5. 비동기 AI와 새로운 패러다임: MCTS vs. IDDFS-$\alpha\beta$](#version-5-비동기-ai와-새로운-패러다임-mcts-vs-iddfs-alphabeta)
+
 ## 프로젝트 개요
 
 이 프로젝트는 React와 TypeScript를 사용하여 만든 오셀로(리버시) 게임으로, Minimax 알고리즘을 기반으로 한 인공지능(AI)의 다양한 전략과 최적화 기법을 탐구한다.
@@ -711,3 +713,372 @@ Version 4에서는 전체적으로 균형잡힌 Intuition 전략을 적용한다
 무브 오더링은 알파-베타 탐색의 성능을 한 단계 끌어올리는 최적화 기법임을 확인했다. 특히 현재 국면을 반영하여 유망한 수를 동적으로 찾아내는 Intuition 전략이 효율성과 안정성 측면에서 균형잡힌 모습을 보여주었다. 그러나 특정 수준 또는 국면에서는 위치 가중치에 따른 정적 정렬 방식처럼 보다 단순한 전략이 더 효율적일 수 있다는 점도 발견했다.
 
 이제 Minimax 계열 알고리즘의 최적화를 넘어, 보다 복잡한 몬테-카를로 트리 탐색(Monte-Carlo Tree Search, MCTS)을 게임에 적용하여 새로운 AI 알고리즘과 전략, 최적화에 대해 탐구해보고자 한다. 
+
+## Version 5. 비동기 AI와 새로운 패러다임: MCTS vs. IDDFS-$\alpha\beta$
+
+### 1. Version 4의 한계와 새로운 도전
+
+[Version 4](#version-4-무브-오더링move-ordering을-통한-탐색-가속)에서는 무브 오더링을 통해 알파-베타 탐색의 효율성을 끌어올렸다. 하지만 두 가지 근본적인 한계가 있었다.
+
+1. 평가 함수 의존성: Minimax 계열 알고리즘은 근본적으로 상태 평가 함수(Evaluation Function)의 성능에 크게 의존한다. 아무리 탐색을 잘하더라도 평가 함수가 국면의 유불리를 잘못 판단한다면 최선의 수를 놓칠 수밖에 없다.
+2. UI 브로킹: 탐색 깊이가 깊어질수록 계산량이 기하급수적으로 늘어나 브라우저의 메인 스레드를 차단(Blocking)하여 UI가 멈추는 현상이 발생했다. 이는 사용자 경험에 치명적인 문제였다.
+
+따라서 이번 Version 5에서는 세 가지 새로운 도전을 통해 이러한 한계를 극복하고자 한다.
+
+- 새로운 탐색 패러다임 도입: 평가 함수에 의존하지 않고 무작위 시뮬레이션을 통해 수의 가치를 판단하는 몬테-카를로 트리 탐색(Monte-Carlo Tree Search, MCTS) 알고리즘을 도입한다.
+- 공정한 비료를 위한 IDDFS-$\alpha\beta$ 도입: MCTS는 '시간'을 기반으로 탐색하는 반면, 기존 알파-베타는 '고정된 깊이'로 탐색하여 직접 비교가 어려웠다. 공정한 대결을 위해, 알파-베타 알고리즘 역시 주어진 시간을 모두 활용해 동적으로 탐색 깊이를 늘리는 반복적 깊이 심화(Iterative Deepening Depth-First Search, IDDFS) 기법을 적용하여 알고리즘을 개선했다. 
+- 비동기 처리와사용자 경험 개선: 무거운 AI 연산을 별도의 스레드에서 처리하는 웹 워커(Web Worker)를 적용하여 AI가 계산하는 동안에도 UI가 멈추지 않도록 개선한다.
+
+### 2. 주요 개선 사항
+
+#### 가. 몬테-카를로 트리 탐색(MCTS)의 도입
+
+MCTS는 Minimax 계열 알고리즘과 전혀 다른 방식으로 최적의 수를 찾는다. 특정 국면의 좋고 나쁨을 고정된 가중치 맵으로 평가하는 대신, 해당 국면에서부터 게임이 끝날 때까지 수많은 무작위 시뮬레이션(이를 'Rollout' 또는 'Play-out'이라 함)을 실행한다. 그리고 그 승률 통계를 기반으로 어떤 수가 가장 유망한지 학습해 나간다.
+
+MCTS는 크게 네 가지 단계를 반복하며 최선의 수를 찾아낸다.
+
+1. 선택(Selection): 현재까지의 통계(승률)를 바탕으로 가장 유망해보이는 자식 노드를 선택하여 트리 아래로 이동한다.
+2. 확장(Expansion): 선택된 노드에서 아직 탐색하지 않은 새로운 수를 찾아 트리를 확장한다.
+3. 시뮬레이션(Simulation): 새로 확장된 노드에서부터 게임이 끝날 때까지 무작위로 수를 두어 승패를 결정한다.
+4. 역전파(Backpropagation): 시뮬레이션의 승패 결과를 방금 탐색했던 경로를 따라 루트 노드까지 거슬러 올라가며 각 노드의 승리/시도 횟수 통계를 갱신한다.
+
+<details>
+<summary> MCTS 코드 보기 (Click to expand) </summary>
+
+**선택 함수:** 선택 알고리즘은 UCT(Upper Confidence bound applied to Trees)를 사용하였다. 노드 $n_p$에서 자식노드들 중 하나를 선택할 때, 자식노드 $n_i$에서 신뢰도의 상한을 나타내는 UCB(Upper Confidence Bound)의 식은 다음과 같다.
+
+$$ UCB(n_i) = \bar{v_i} + C \times \sqrt{\frac{\log{N_p}}{N_i}} $$
+
+여기서 $\bar{v_i}$는 노드 ${n_i}$의 평균 승률(또는 가치)이고, $N_i$는 $n_i$의 방문횟수, $N_p$는 $n_i$의 부모노드의 방문횟수이다. $C$는 실험으로 조정해야 하는 상수이다.
+
+```typescript
+// 여기서 탐색 상수는 일반적으로 많이 사용하는 루트2를 사용했다.
+function select(node: Node, explorationConstant = Math.SQRT2): Node {
+    let bestChild: Node | null = null;
+    let maxUcb = -Infinity;
+
+    for (const child of node.children) {
+        if (child.visit === 0) {
+            return child;
+        }
+
+        // 부모 입장에서 자식(상태 차례)의 가치를 평가하므로 음수로 계산한다.
+        // 가치는 승리 시 1, 무승부 시 0, 패배 시 -1 이다.
+        const winRate = -child.value / child.visit;
+
+        const ucb = winRate + explorationConstant * Math.sqrt(Math.log(node.visit) / child.visit)
+        
+        // ucb 값에 따라 최선의 자식 노드를 갱신한다.
+        if (bestChild === null || ucb > maxUcb) {
+            bestChild = child;
+            maxUcb = ucb;
+        }
+    }
+    
+    // 최선의 자식 노드를 반환한다.
+    return bestChild!;
+}
+```
+
+**확장 함수**
+
+```typescript
+function findBestMove(board: State[], player: Player, start: number): number | null {
+  // ...
+  
+  // 2. 확장 (Expansion)
+  // 게임이 끝나지 않은 리프 노드에 도달했다면, 자식 노드를 생성(확장)함
+  if (!isGameOver(node.board)) {
+    if (node.visit > 0) { // 한 번이라도 방문한 노드만 확장
+      if (node.children.length === 0) {
+        node.children = findNextChildren(node);
+      }
+      node = node.children[0]; // 첫 번째 자식으로 이동
+    }
+  }
+  
+  //...
+}
+
+```
+
+```typescript
+function findNextChildren(node: Node): Node[] {
+  const nextPlayer = node.player === 'b' ? 'w' : 'b';
+  const children: Node[] = [];
+  // 게임판을 순회하며 확장 가능한 상태 확인
+  for (let idx = 0; idx < 64; idx++) {
+    const newBoard = validateAndFlip(node.board, idx, node.player);
+    if (newBoard !== null) {
+      children.push({
+        parent: node,
+        move: idx,
+        board: newBoard,
+        player: nextPlayer,
+        value: 0,
+        visit: 0,
+        children: [],
+      })
+    }
+  }
+  return children;
+}
+```
+
+**시뮬레이션 함수**
+
+```typescript
+function rollout(node: Node) {
+  const player = node.player;
+  const board = node.board.slice();
+
+  let currentTurn = node.player;
+
+  // 게임의 끝까지
+  while (!isGameOver(board)) {
+    const possibleMoves: { move: number, piecesToFlip: number[] }[] = [];
+    // 착수 가능한 점을 찾음
+    for (let i = 0; i < 64; i++) {
+      const piecesToFlip = getFlippablePieces(board, i, currentTurn);
+      if (piecesToFlip.length > 0) {
+        possibleMoves.push({ move: i, piecesToFlip });
+      }
+    }
+
+    if (possibleMoves.length === 0) {
+      currentTurn = currentTurn === 'b' ? 'w' : 'b';
+      continue;
+    }
+
+    // 임의의 점 선택
+    const { move, piecesToFlip } = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+    const opponent = currentTurn === 'b' ? 'w' : 'b';
+
+    // 게임판 갱신
+    board[move] = currentTurn;
+    piecesToFlip.forEach(p => board[p] = currentTurn);
+
+    currentTurn = opponent;
+  }
+
+  // 게임 종료시 승자 판단
+  const winner = determineWinner(calculateScore(board));
+
+  switch (winner) {
+    case "Draw": return 0;
+    case "Black": return player === 'b' ? 1 : -1;
+    case "White": return player === 'w' ? 1 : -1;
+  }
+}
+```
+
+**역전파 함수**
+
+```typescript
+function backPropagate(node: Node, value: number) {
+    let tempNode: Node | null = node;
+    // 자기 자신의 정보를 갱신하고 루트 노드까지 부모 노드로 이동
+    while (tempNode !== null) {
+        tempNode.value += value;
+        tempNode.visit++;
+        tempNode = tempNode.parent;
+    }
+}
+```
+
+**최종 MCTS 함수**
+```typescript
+function findBestMove(board: State[], player: Player, start: number): number | null {
+  // 루트 노드 갱신
+  const root: Node = {
+    parent: null,
+    move: null,
+    board: board,
+    player: player,
+    value: 0,
+    visit: 0,
+    children: [],
+  }
+  
+  // 시간 제한 동안
+  while (performance.now() - start < TIME_LIMIT) {
+    // 1. 선택 (Selection)
+    let node: Node = root;
+    // 자식이 있고, 게임이 끝나지 않은 노드들 중에서 UCT 값이 가장 높은 자식을 따라 내려간다.
+    while (node.children.length > 0 && !isGameOver(node.board)) {
+      node = select(node);
+    }
+
+    // 2. 확장 (Expansion)
+    // 게임이 끝나지 않은 리프 노드에 도달했다면, 자식 노드를 생성(확장)한다.
+    if (!isGameOver(node.board)) {
+      if (node.visit > 0) { // 한 번이라도 방문한 노드만 확장한다.
+        if (node.children.length === 0) {
+          node.children = findNextChildren(node);
+        }
+        node = node.children[0]; // 첫 번째 자식으로 이동한다.
+      }
+    }
+    // 3. 시뮬레이션 (Rollout)
+    const value = rollout(node);
+
+    // 4. 역전파 (Backpropagation)
+    backPropagate(node, value);
+  }
+
+  // 시뮬레이션 종료 후, 루트의 자식 중 가장 많이 방문된(가장 유망한 또는 강인한) 수를 선택한다.
+  let bestMove: number | null = null;
+  let maxVisit = -1;
+  for (const child of root.children) {
+    if (child.visit > maxVisit) {
+      maxVisit = child.visit;
+      bestMove = child.move;
+    }
+  }
+
+  return bestMove;
+}
+```
+
+</details>
+
+이 과정을 주어진 시간동안 수없이 반복하면 승률이 높은 유망한 수에 대해 자연스럽게 탐색이 집중되고, 이를 통해 최적의 수를 찾아낼 수 있다.
+
+#### 나. IDDFS-$\alpha\beta$ 도입
+
+IDDFS는 다음과 같은 아이디어에 기반한다.
+
+- Depth 1까지 탐색해서 최선의 수를 찾는다.
+- 시간이 남으면, Depth 2까지 다시 처음부터 탐색해서 최선의 수를 갱신한다.
+- 시간이 또 남으면, Depth 3까지 다시 탐색한다.
+- ...
+- 이렇게 주어진 시간이 다 될 때까지 탐색 깊이를 1씩 늘려가며 반복한다. 시간이 다 되면, 마지막으로 성공적으로 탐색을 마친 깊이에서 찾은 최선의 수를 최종 결과로 사용한다.
+
+따라서 구현 방법은 기존의 최적 착수점을 찾는 알고리즘에서 제한 시간내에 탐색 깊이를 하나씩 늘려가는 반복을 수행하면 된다. 
+
+#### 다. 웹 워커(Web Worker)를 통한 UI 반응성 확보
+
+기존 AI는 계산이 시작되면 완료될 때까지 메인 스레드를 점유하여 화면 업데이트나 사용자 입력 처리르 막았다. 이 문제를 해결하기 위해 웹 워커를 도입하여 AI 계산을 백그라운드 스레드로 분리했다.
+
+**동작 흐름:**
+
+1. 메인 스레드(/component/Game.tsx): AI의 차례가 되면, 현재 게임판의 상태(board)와 플레이어 정보(player)를 웹 워커에게 메시지(postMessage)로 전달하고, "AI is thinking..."이라는 UI를 표시한다.
+2. 워커 스레드(/workers/mcts.ts): 메시지를 받아 MCTS 연산을 수행한다. 이 과정은 메인 스레드에 영향을 주지 않는다.
+3. 워커 스레드(/workers/mcts.ts): 최적의 수를 찾으면, 그 결과를 다시 메인 스레드에 메시지(postMessage)로 보낸다.
+4. 메인 스레드(/component/Game.tsx): 워커로부터 받은 최적의 수를 게임에 적용하고 "AI is thinking..." UI를 숨긴다.
+
+이를 통해 AI가 아무리 복잡한 계산을 하더라도 사용자는 지연 없이 화면을 보거나 다른 메뉴를 조작할 수 있게 되어 사용자 경험이 크게 향상되었다.
+
+<details>
+<summary> 웹 워커 적용 코드 보기 (Click to expand) </summary>
+
+Game.tsx(메인 스레드)
+
+```typescript
+// Game.tsx
+// 워커를 생성하고, 메시지를 주고받는 로직
+
+// ...
+const workerRef = useRef<Worker | null>(null); // Web Worker 인스턴스를 저장하기 위해 useRef 사용
+
+// 컴포넌트가 처음 마운트될 때 Web Worker를 생성한다.
+useEffect(() => {
+    // 워커 인스턴스 생성
+    workerRef.current = new Worker(
+      // src/workers 디렉토리에 파일이 있음에 유의한다.
+      new URL("../workers/mcts.ts", import.meta.url), {type: 'module'}
+    );
+
+    // 워커로부터 메시지를 받았을 때의 처리
+    workerRef.current.onmessage = (e: MessageEvent<number | null>) => {
+        const bestMove = e.data;
+        if (bestMove !== null) {
+            handlePlay(bestMove);
+        }
+        setIsAiThinking(false); // 계산 종료 상태 반영
+    }
+
+    // 컴포넌트가 언마운트될 때 워커를 정리한다.
+    return () => {
+        workerRef.current?.terminate();
+    }
+}, [handlePlay]); // handlePlay가 변경될 때마다 이 효과를 다시 실행하지 않도록 의존성 배열을 신중하게 관리해야 한다. 
+// handlePlay는 useCallback을 적용하여 불필요한 렌더링이 일어나지 않도록 했다.
+
+useEffect(() => {
+    // AI의 턴이 되면 워커에게 작업을 요청
+    if (!isGameOver && aiPlayer === turn && workerRef.current) {
+        setIsAiThinking(true); // 계산 중 상태로 변경
+        // 워커에게 계산에 필요한 데이터를 메시지로 보낸다.
+        workerRef.current.postMessage({
+            board: currentSquares,
+            player: aiPlayer,
+        });
+    }
+}, [aiPlayer, currentSquares, handlePlay, isGameOver, turn])
+// ...
+```
+
+mcts.ts(워커 스레드)
+```typescript
+// mcts.ts
+// 워커에게 전달할 메세지의 타입을 미리 지정했다.
+import type {MctsWorkerMessage} from "../types";
+import {findBestMove} from "../algorithms/mcts.ts";
+
+// 메인 스레드로부터 메시지를 받으면 AI 계산 시작
+self.onmessage = (e: MessageEvent<MctsWorkerMessage>) => {
+  const { board, player } = e.data;
+  const startTime = performance.now();
+
+  const bestMove = findBestMove(board, player, startTime);
+
+  // 계산이 끝나면 결과를 메인 스레드로 전송
+  self.postMessage(bestMove);
+}
+```
+
+vite.config.ts(vite 설정)
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+// https://vite.dev/config/
+export default defineConfig({
+  base: '/othello/',
+  plugins: [react(), tailwindcss()],
+  worker: { format: "es" }, // <- 이 줄 추가
+})
+```
+
+</details>
+
+### 3. MCTS vs IDDFS-$\alpha\beta$ 시뮬레이션 결과 및 분석
+
+두 최종 AI를 동일한 시간제한 조건에서 대결시킨 결과는 다음과 같다.
+
+| 시간제한  | 총 게임 수 | MCTS 승리 | A-B (IDDFS) 승리 | 무승부/기타 | MCTS 승률   | A-B (IDDFS) 승률 |
+|:------|:-------|:--------|:---------------|:-------|:----------|:---------------|
+| 0.01초 | 10     | 2       | 8              | 0      | 20.0%     | 80.0%          |
+| 0.03초 | 10     | 2       | 8              | 0      | 20.0%     | 80.0%          |
+| 0.05초 | 10     | 0       | 9              | 1      | 0.0%      | 90.0%          |
+| 0.08초 | 10     | 0       | 9              | 1      | 0.0%      | 90.0%          |
+| 0.1초  | 10     | 3       | 7              | 0      | 30.0%     | 70.0%          |
+| 1초    | 10     | 2       | 8              | 0      | 20.0%     | 80.0%          |
+| 2초    | 10     | 1       | 9              | 0      | 10.0%     | 90.0%          |
+| 3초    | 10     | 5       | 5              | 0      | **50.0%** | **50.0%**      |
+| 4초    | 10     | 2       | 8              | 0      | 20.0%     | 80.0%          |
+| 5초    | 10     | 4       | 6              | 0      | 40.0%     | 60.0%          |
+
+#### 가. 분석 및 인사이트
+
+1. IDDFS-$\alpha\beta$의 강력함: IDDFS를 적용한 알파-베타는 주어진 시간을 온전히 활용해 더 깊이 탐색하게 되면서, 대부분의 시간대에서 70~90%의 압도적인 승률을 기록했다. 이는 잘 설계된 평가 함수와 효율적인 탐색의 조합이 얼마나 강력한지를 명확히 보여준다.
+2. 3초의 특이점: 이번 실험의 가장 흥미로운 지점은 3초이다. 2초까지 10%에 불과했던 MCTS의 승률이 3초에서 갑자기 50%까지 치솟아 강한 상대와 대등한 성적을 기록했다. 이는 알파-베타가 3초 동안 도달하는 특정 탐색 깊이의 전략적 허점에 MCTS의 시뮬레이션이 정확히 대응하는 일종의 균형이 형성된 것으로 해석할 수 있다.
+3. MCTS의 가능성과 개선 방안: 비록 전반적인 승률은 낮지만, 시간이 늘어남에 따라 성능이 향상되는 기본적인 특성을 여전히 보여주었다(2초: 10 -> ... -> 4초: 20 -> 5초: 40). 이는 MCTS의 잠재력을 시사하며, 다음 개선 방향을 생각해볼 수 있다.
+
+### 4. 종합 결론 및 다음 과제
+
+Version 5에서는 Minimax 알고리즘의 한계를 넘어 MCTS라는 새로운 탐색 패러다임을 도입하고, 웹 워커를 통해 사용자 경험을 개선했으며, IDDFS로 개선된 알파-베타와의 대결을 통해 잠재력과 개선점을 발견할 수 있었다.
+
+이번 실험을 통해 MCTS를 개선하기 위한 다음 과제를 떠올려볼 수 있었다. 바로 시뮬레이션(Rollout) 단계의 개선이다. 현재의 완전 무작위 방식에서 벗어나 약간의 휴리스틱(ex. 위치 가중치)을 추가하여 시뮬레이션의 질을 높인다면, 지금의 '특이점'을 더 많은 시간대에서 만들어내고 IDDFS-$\alpha\beta$에 대응할 수 있을 것이다.

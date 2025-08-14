@@ -1,9 +1,10 @@
 import { DIRECTIONS, POSITIONAL_WEIGHTS } from "../constants";
 import type { Player, ScoreBoard, State, Winner } from "../types";
 
-export function validateAndFlip(board: State[], idx: number, player: Player): State[] | null {
+
+export function getFlippablePieces(board: State[], idx: number, player: Player): number[] {
     if (idx < 0 || idx >= 64 || board[idx]) {
-        return null;
+        return [];
     }
 
     const opponent: Player = player === 'b' ? 'w' : 'b';
@@ -36,6 +37,12 @@ export function validateAndFlip(board: State[], idx: number, player: Player): St
         }
     }
 
+    return allPiecesToFlip;
+}
+
+export function validateAndFlip(board: State[], idx: number, player: Player): State[] | null {
+    const allPiecesToFlip = getFlippablePieces(board, idx, player);
+
     if (allPiecesToFlip.length === 0) {
         return null;
     }
@@ -48,7 +55,7 @@ export function validateAndFlip(board: State[], idx: number, player: Player): St
 
 export function shouldPass(board: State[], player: Player): boolean {
     for (let idx = 0; idx < 64; idx++) {
-        if (board[idx] === null && validateAndFlip(board, idx, player) !== null) {
+        if (board[idx] === null && getFlippablePieces(board, idx, player).length > 0) {
             return false;
         }
     }

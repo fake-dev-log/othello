@@ -1,5 +1,6 @@
-import { calculateScore, determineWinner, shouldPass, validateAndFlip } from "../logics";
-import type { Player, State } from "../tyeps";
+import {calculateScore, determineWinner, getFlippablePieces, shouldPass, validateAndFlip} from "../logics";
+import type { Player, State } from "../types";
+import {TIME_LIMIT} from "../constants";
 
 interface Node {
     parent: Node | null;
@@ -16,20 +17,16 @@ function isGameOver(board: State[]): boolean {
     const isBPass = shouldPass(board, 'b');
     const isWPass = shouldPass(board, 'w');
 
-    if (black + white === 64 || (isBPass && isWPass)) {
-        return true;
-    }
-    
-    return false;
+    return black + white === 64 || (isBPass && isWPass);
 }
 
 function findNextChildren(node: Node): Node[] {
     const nextPlayer = node.player === 'b' ? 'w' : 'b';
-    const actions: Node[] = [];
+    const children: Node[] = [];
     for (let idx = 0; idx < 64; idx++) {
         const newBoard = validateAndFlip(node.board, idx, node.player);
         if (newBoard !== null) {
-            actions.push({
+            children.push({
                 parent: node,
                 move: idx,
                 board: newBoard,
@@ -40,7 +37,7 @@ function findNextChildren(node: Node): Node[] {
             })
         }
     }
-    return actions;
+    return children;
 }
 
 function select(node: Node, explorationConstant = Math.SQRT2): Node {
@@ -68,15 +65,16 @@ function select(node: Node, explorationConstant = Math.SQRT2): Node {
 
 function rollout(node: Node) {
     const player = node.player;
-    let board = node.board.slice();
+    const board = node.board.slice();
 
     let currentTurn = node.player;
 
     while (!isGameOver(board)) {
-        const possibleMoves: number[] = [];
+        const possibleMoves: { move: number, piecesToFlip: number[] }[] = [];
         for (let i = 0; i < 64; i++) {
-            if (validateAndFlip(board, i, currentTurn)) {
-                possibleMoves.push(i);
+            const piecesToFlip = getFlippablePieces(board, i, currentTurn);
+            if (piecesToFlip.length > 0) {
+                possibleMoves.push({ move: i, piecesToFlip });
             }
         }
 
@@ -85,9 +83,13 @@ function rollout(node: Node) {
             continue;
         }
 
-        const randomMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
-        board = validateAndFlip(board, randomMove, currentTurn)!;
-        currentTurn = currentTurn === 'b' ? 'w' : 'b';
+        const { move, piecesToFlip } = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+        const opponent = currentTurn === 'b' ? 'w' : 'b';
+
+        board[move] = currentTurn;
+        piecesToFlip.forEach(p => board[p] = currentTurn);
+
+        currentTurn = opponent;
     }
 
     const winner = determineWinner(calculateScore(board));
@@ -108,7 +110,7 @@ function backPropagate(node: Node, value: number) {
     }
 }
 
-export function mcts(board: State[], player: Player, timeLimit: number = 5000) {
+export function findBestMove(board: State[], player: Player, start: number): number | null {
     const root: Node = {
         parent: null,
         move: null,
@@ -118,9 +120,7 @@ export function mcts(board: State[], player: Player, timeLimit: number = 5000) {
         visit: 0,
         children: [],
     }
-
-    const start = performance.now();
-    while (performance.now() - start < timeLimit) {
+    while (performance.now() - start < TIME_LIMIT) {
         let node: Node = root;
 
         while (node.children.length > 0 && !isGameOver(node.board)) {
@@ -131,9 +131,8 @@ export function mcts(board: State[], player: Player, timeLimit: number = 5000) {
             if (node.visit > 0) {
                 if (node.children.length === 0) {
                     node.children = findNextChildren(node);
-                } else {
-                    node = node.children[0];
                 }
+                node = node.children[0];
             }
         }
         const value = rollout(node);

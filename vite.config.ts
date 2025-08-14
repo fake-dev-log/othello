@@ -6,4 +6,5 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   base: '/othello/',
   plugins: [react(), tailwindcss()],
+  worker: { format: "es" },
 })

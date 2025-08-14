@@ -1,5 +1,5 @@
-import { DEPTH_BOUND } from "../constants";
-import { calculateScore, evaluateBoard, shouldPass, validateAndFlip } from "../logics";
+import {TIME_LIMIT} from "../constants";
+import {calculateScore, evaluateBoard, getFlippablePieces, shouldPass} from "../logics";
 import type {State, Player} from "../types"
 
 function minimaxABRecursive(
@@ -8,28 +8,38 @@ function minimaxABRecursive(
     depth: number,
     alpha: number,
     beta: number,
-    maximizingPlayer: Player
+    maximizingPlayer: Player,
+    start: number
 ): number {
+    const now = performance.now();
     const { black, white } = calculateScore(board);
-    const blackPass = shouldPass(board, 'b');
-    const whitePass = shouldPass(board, 'w');
+    const opponent = player === 'b' ? 'w' : 'b';
 
-    if (depth === 0 || black + white === 64 || (blackPass && whitePass)) {
+    const playerPass = shouldPass(board, player);
+    const opponentPass = shouldPass(board, opponent);
+
+    if (now - start > TIME_LIMIT || depth === 0 || black + white === 64 || (playerPass && opponentPass)) {
         return evaluateBoard(board, maximizingPlayer);
     }
 
-    const opponent = player === 'b' ? 'w' : 'b';
-    if (shouldPass(board, player)) {
-        return minimaxABRecursive(board, opponent, depth - 1, alpha, beta, maximizingPlayer);
+    if (playerPass) {
+        return minimaxABRecursive(board, opponent, depth - 1, alpha, beta, maximizingPlayer, start);
     }
 
     const isMaximizingPlayer = player === maximizingPlayer;
     let bestValue = isMaximizingPlayer ? -Infinity : Infinity;
 
     for (let idx = 0; idx < 64; idx++) {
-        const nextBoard = validateAndFlip(board, idx, player);
-        if (nextBoard) {
-            const value = minimaxABRecursive(nextBoard, opponent, depth - 1, alpha, beta, maximizingPlayer);
+        const piecesToFlip = getFlippablePieces(board, idx, player);
+
+        if (piecesToFlip.length > 0) {
+            board[idx] = player;
+            piecesToFlip.forEach(p => board[p] = player);
+
+            const value = minimaxABRecursive(board, opponent, depth - 1, alpha, beta, maximizingPlayer, start);
+
+            board[idx] = null;
+            piecesToFlip.forEach(p => board[p] = opponent);
 
             if (isMaximizingPlayer) {
                 bestValue = Math.max(bestValue, value);
@@ -43,26 +53,24 @@ function minimaxABRecursive(
                 if (beta <= alpha) {
                     break;
                 }
-
             }
         }
+        if (isMaximizingPlayer && beta <= alpha) break
     }
 
     return bestValue;
 }
 
-export function findBestMove(board: State[], player: Player): number {
-    let alpha = -Infinity;
-    const beta = Infinity;
-    let bestMove = -1;
+export function findBestMove(board: State[], player: Player, start: number): number {
+    const opponent = player === 'b' ? 'w' : 'b';
 
-    const possibleMoves: { move: number, states: State[] }[] = [];
+    const possibleMoves: { move: number, piecesToFlip: number[] }[] = [];
     for (let idx = 0; idx < 64; idx++) {
-        const states = validateAndFlip(board, idx, player)
-        if (states) {
+        const piecesToFlip = getFlippablePieces(board, idx, player);
+        if (piecesToFlip.length > 0) {
             possibleMoves.push({
               move: idx,
-              states: states
+              piecesToFlip: piecesToFlip
             });
         }
     }
@@ -71,24 +79,51 @@ export function findBestMove(board: State[], player: Player): number {
         return -1;
     }
 
-    const opponent = player === 'b' ? 'w' : 'b';
-
     const moveValueMap: { [move: number]: number } = {};
-    possibleMoves.forEach(({ move, states}) => moveValueMap[move] = minimaxABRecursive(states, opponent, 3, alpha, beta, player));
+    possibleMoves.forEach(({ move, piecesToFlip}) => {
+        board[move] = player;
+        piecesToFlip.forEach(p => board[p] = player);
+
+        moveValueMap[move] = minimaxABRecursive(board, opponent, 3, -Infinity, Infinity, player, start);
+
+        board[move] = null;
+        piecesToFlip.forEach(p => board[p] = opponent);
+    });
     possibleMoves.sort((a, b) => moveValueMap[b.move] - moveValueMap[a.move]);
 
-    for (const { move, states } of possibleMoves) {
-        const value = minimaxABRecursive(states, opponent, DEPTH_BOUND, alpha, beta, player);
+    let finalBestMove = possibleMoves[0].move;
 
-        if (value > alpha) {
-            alpha = value;
-            bestMove = move;
+    for (let depth = 1; depth < 64; depth++) {
+        let alpha = -Infinity;
+        const beta = Infinity;
+        let currentBestMoveForDepth = -1;
+
+        for (const {move, piecesToFlip} of possibleMoves) {
+            if (performance.now() - start >= TIME_LIMIT) {
+                currentBestMoveForDepth = -1;
+                break;
+            }
+
+            board[move] = player;
+            piecesToFlip.forEach(p => board[p] = player);
+
+            const value = minimaxABRecursive(board, opponent, depth, alpha, beta, player, start);
+
+            board[move] = null;
+            piecesToFlip.forEach(p => board[p] = opponent);
+
+            if (value > alpha) {
+                alpha = value;
+                currentBestMoveForDepth = move;
+            }
+        }
+
+        if (performance.now() - start < TIME_LIMIT) {
+            finalBestMove = currentBestMoveForDepth;
+        } else {
+            break;
         }
     }
 
-    if (bestMove === -1) {
-        return possibleMoves[0].move;
-    }
-
-    return bestMove;
+    return finalBestMove;
 }

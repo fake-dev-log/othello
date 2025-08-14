@@ -19,9 +19,12 @@ const DIRECTIONS = [-9, -8, -7, -1, 1, 7, 8, 9];
 
 const DEPTH_BOUND = 7;
 
+const TIME_LIMIT = 5000;
+
 export {
     INITIAL_SQUARES,
     POSITIONAL_WEIGHTS,
     DIRECTIONS,
-    DEPTH_BOUND
+    DEPTH_BOUND,
+    TIME_LIMIT,
 }

@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import { Board } from "./Board";
 import type { ScoreBoard, Player, State, Winner } from "../types";
 import { calculateScore, determineWinner, shouldPass, validateAndFlip } from "../logics";
 import { INITIAL_SQUARES } from "../constants";
 import { GameInfo } from "./GameInfo";
-import { mcts } from "../algorithms/mcts";
 
 export default function Game() {
     const [ history, setHistory ] = useState<State[][]>([INITIAL_SQUARES]);
@@ -12,6 +11,9 @@ export default function Game() {
     const [ message, setMessage ] = useState('');
     const [ winner, setWinner ] = useState<Winner | null>(null);
     const [ aiPlayer, setAIPlayer ] = useState<Player>(Math.random() > 0.5 ? 'b' : 'w');
+    const [ isAiThinking, setIsAiThinking ] = useState<boolean>(false);
+
+    const workerRef = useRef<Worker | null>(null);
 
     const isGameOver = !!winner;
     const currentSquares = history[currentMove];
@@ -67,30 +69,43 @@ export default function Game() {
     
     }, [currentMove, currentSquares, history, isGameOver, turn]);
 
-    const playAI = useCallback((board: State[]) => {
-        const bestMove = mcts(board, aiPlayer);
-        
-        if (bestMove !== null) {
-            handlePlay(bestMove);
-        }
-    }, [aiPlayer, handlePlay])
-
     function restart() {
         setHistory([INITIAL_SQUARES]);
         setCurrentMove(0);
         setMessage('');
         setWinner(null);
         setAIPlayer(Math.random() > 0.5 ? 'b' : 'w');
+        setIsAiThinking(false);
     }
 
     useEffect(() => {
-        if (!isGameOver && aiPlayer === turn) {
-            const aiTimeout = setTimeout(() => {
-                playAI(currentSquares);
-            }, 1000);
-            return () => clearTimeout(aiTimeout)
+        workerRef.current = new Worker(
+          new URL("../workers/mcts.ts", import.meta.url),
+          {type: 'module'}
+        );
+
+        workerRef.current.onmessage = (e: MessageEvent<number | null>) => {
+            const bestMove = e.data;
+            if (bestMove !== null) {
+                handlePlay(bestMove);
+            }
+            setIsAiThinking(false);
         }
-    }, [aiPlayer, currentSquares, isGameOver, playAI, turn])
+
+        return () => {
+            workerRef.current?.terminate();
+        }
+    }, [handlePlay]);
+
+    useEffect(() => {
+        if (!isGameOver && aiPlayer === turn && workerRef.current) {
+            setIsAiThinking(true);
+            workerRef.current.postMessage({
+                board: currentSquares,
+                player: aiPlayer,
+            });
+        }
+    }, [aiPlayer, currentSquares, handlePlay, isGameOver, turn])
 
     return (
         <div className="min-h-screen bg-gray-900 text-white flex flex-col items-center justify-center font-sans p-4">
@@ -98,13 +113,14 @@ export default function Game() {
             <Board
                 squares={currentSquares}
                 onPlay={handlePlay}
-                disabled={isGameOver}
+                disabled={isGameOver || isAiThinking}
             />
             <GameInfo
                 turn={turn}
                 scoreBoard={scoreBoard}
                 winner={winner}
                 message={message}
+                isAiThinking={isAiThinking}
                 restart={restart}
             />
         </div>

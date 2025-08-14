@@ -1,6 +1,13 @@
 import type { Player, ScoreBoard, Winner } from "../types";
 
-export function GameInfo({ turn, scoreBoard, winner, message, restart }: { turn: Player, scoreBoard: ScoreBoard, winner: Winner | null, message: string, restart: () => void }) {
+export function GameInfo({ turn, scoreBoard, winner, message, restart, isAiThinking }: {
+  turn: Player,
+  scoreBoard: ScoreBoard,
+  winner: Winner | null,
+  message: string,
+  isAiThinking: boolean,
+  restart: () => void
+}) {
     const isBlackTurn = turn === 'b';
     
     return (
@@ -23,9 +30,11 @@ export function GameInfo({ turn, scoreBoard, winner, message, restart }: { turn:
                     White: {scoreBoard.white}
                 </div>
             </div>
-            <div className="mt-4 text-center text-xl h-8">
+            <div className="mt-4 text-center text-xl h-8 justify-between">
                 {winner ? (
-                    <span className="font-bold text-amber-600">{winner === 'Draw' ? "It's a Draw!" : `${winner} wins!`}</span>
+                    <span className="font-bold text-amber-600">{winner === 'Draw' ? "Draw!" : `${winner} wins!`}</span>
+                ) : isAiThinking? (
+                    <span className="font-bold text-blue-400 animate-pulse">AI is thinking...</span>
                 ) : (
                     <span>{message || `${isBlackTurn ? 'Black' : 'White'}'s turn`}</span>
                 )}
