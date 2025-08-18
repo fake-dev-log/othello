@@ -9,7 +9,7 @@ function minimaxABRecursive(
     alpha: number,
     beta: number,
     maximizingPlayer: Player,
-    start: number
+    start?: number
 ): number {
     const now = performance.now();
     const { black, white } = calculateScore(board);
@@ -18,7 +18,7 @@ function minimaxABRecursive(
     const playerPass = shouldPass(board, player);
     const opponentPass = shouldPass(board, opponent);
 
-    if (now - start > TIME_LIMIT || depth === 0 || black + white === 64 || (playerPass && opponentPass)) {
+    if ((start && now - start > TIME_LIMIT) || depth === 0 || black + white === 64 || (playerPass && opponentPass)) {
         return evaluateBoard(board, maximizingPlayer);
     }
 
@@ -84,7 +84,7 @@ export function findBestMove(board: State[], player: Player, start: number): num
         board[move] = player;
         piecesToFlip.forEach(p => board[p] = player);
 
-        moveValueMap[move] = minimaxABRecursive(board, opponent, 3, -Infinity, Infinity, player, start);
+        moveValueMap[move] = minimaxABRecursive(board, opponent, 3, -Infinity, Infinity, player);
 
         board[move] = null;
         piecesToFlip.forEach(p => board[p] = opponent);

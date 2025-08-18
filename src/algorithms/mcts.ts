@@ -1,6 +1,6 @@
 import {calculateScore, determineWinner, getFlippablePieces, shouldPass, validateAndFlip} from "../logics";
-import type { Player, State } from "../types";
-import {TIME_LIMIT} from "../constants";
+import type { Player, PossibleMove, State } from "../types";
+import {POSITIONAL_WEIGHTS, TIME_LIMIT} from "../constants";
 
 interface Node {
     parent: Node | null;
@@ -63,6 +63,36 @@ function select(node: Node, explorationConstant = Math.SQRT2): Node {
     return bestChild!;
 }
 
+function selectMoveByWeight(possibleMoves: PossibleMove[]): PossibleMove {
+    // 최소 가중치를 찾음
+    const minWeight = Math.min(...possibleMoves.map(m => POSITIONAL_WEIGHTS[m.move]));
+    // 최소 가중치가 0이하 일 때는 1로 변환. 양수일 경우에는 그대로 사용할 수 있도록 함.
+    const offset = minWeight <= 0 ? -minWeight + 1 : 0;
+
+    const weightedMoves = possibleMoves.map(m => ({
+        ...m,
+        weight: POSITIONAL_WEIGHTS[m.move] + offset,
+    }));
+
+    const totalWeight = weightedMoves.reduce((sum, m) => sum + m.weight, 0);
+
+    // 0과 가중치 총 합 사이의 수를 하나 뽑음.
+    let randomValue = Math.random() * totalWeight;
+
+    // 착수 가능한 수들을 순회하면서,
+    for (const move of weightedMoves) {
+        // 0과 가중치 총 합 사이의 임의의 수에서 각 착수 가능점의 가중치를 빼줌.
+        randomValue -= move.weight;
+        // 최초로 0 이하가 되는 착수점 선택.
+        if (randomValue <= 0) {
+            return move;
+        }
+    }
+
+    // 예외적인 상황 대비 마지막 수 반환
+    return weightedMoves[weightedMoves.length - 1];
+}
+
 function rollout(node: Node) {
     const player = node.player;
     const board = node.board.slice();
@@ -70,7 +100,7 @@ function rollout(node: Node) {
     let currentTurn = node.player;
 
     while (!isGameOver(board)) {
-        const possibleMoves: { move: number, piecesToFlip: number[] }[] = [];
+        const possibleMoves: PossibleMove[] = [];
         for (let i = 0; i < 64; i++) {
             const piecesToFlip = getFlippablePieces(board, i, currentTurn);
             if (piecesToFlip.length > 0) {
@@ -83,7 +113,8 @@ function rollout(node: Node) {
             continue;
         }
 
-        const { move, piecesToFlip } = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+        // const { move, piecesToFlip } = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+        const { move, piecesToFlip } = selectMoveByWeight(possibleMoves);
         const opponent = currentTurn === 'b' ? 'w' : 'b';
 
         board[move] = currentTurn;
@@ -128,13 +159,11 @@ export function findBestMove(board: State[], player: Player, start: number): num
         }
 
         if (!isGameOver(node.board)) {
-            if (node.visit > 0) {
-                if (node.children.length === 0) {
-                    node.children = findNextChildren(node);
-                }
-                if (node.children.length > 0) {
-                    node = node.children[0];
-                }
+            if (node.children.length === 0) {
+                node.children = findNextChildren(node);
+            }
+            if (node.children.length > 0) {
+                node = node.children[0];
             }
         }
         const value = rollout(node);
