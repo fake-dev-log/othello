@@ -1,6 +1,6 @@
 import {TIME_LIMIT} from "../constants";
-import {calculateScore, evaluateBoard, getFlippablePieces, shouldPass} from "../logics";
-import type {State, Player} from "../types"
+import {calculateScore, evaluateBoard, findPossibleMoves, getFlippablePieces, shouldPass} from "../logics";
+import type {State, Player, PossibleMove} from "../types"
 
 function minimaxABRecursive(
     board: State[],
@@ -61,37 +61,33 @@ function minimaxABRecursive(
     return bestValue;
 }
 
-export function findBestMove(board: State[], player: Player, start: number): number {
+export function shallowSearch(board: State[], possibleMoves: PossibleMove[], player: Player, depth: number = 3): PossibleMove {
     const opponent = player === 'b' ? 'w' : 'b';
-
-    const possibleMoves: { move: number, piecesToFlip: number[] }[] = [];
-    for (let idx = 0; idx < 64; idx++) {
-        const piecesToFlip = getFlippablePieces(board, idx, player);
-        if (piecesToFlip.length > 0) {
-            possibleMoves.push({
-              move: idx,
-              piecesToFlip: piecesToFlip
-            });
-        }
-    }
-
-    if (possibleMoves.length === 0) {
-        return -1;
-    }
-
     const moveValueMap: { [move: number]: number } = {};
     possibleMoves.forEach(({ move, piecesToFlip}) => {
         board[move] = player;
         piecesToFlip.forEach(p => board[p] = player);
 
-        moveValueMap[move] = minimaxABRecursive(board, opponent, 3, -Infinity, Infinity, player);
+        moveValueMap[move] = minimaxABRecursive(board, opponent, depth, -Infinity, Infinity, player);
 
         board[move] = null;
         piecesToFlip.forEach(p => board[p] = opponent);
     });
     possibleMoves.sort((a, b) => moveValueMap[b.move] - moveValueMap[a.move]);
 
-    let finalBestMove = possibleMoves[0].move;
+    return possibleMoves[0];
+}
+
+export function findBestMove(board: State[], player: Player, start: number): number {
+    const opponent = player === 'b' ? 'w' : 'b';
+
+    const possibleMoves = findPossibleMoves(board, player);
+
+    if (possibleMoves.length === 0) {
+        return -1;
+    }
+
+    let finalBestMove = shallowSearch(board, possibleMoves, player).move;
 
     for (let depth = 1; depth < 64; depth++) {
         let alpha = -Infinity;

@@ -1,5 +1,5 @@
 import { DIRECTIONS, POSITIONAL_WEIGHTS } from "../constants";
-import type { Player, ScoreBoard, State, Winner } from "../types";
+import type {Player, PossibleMove, ScoreBoard, State, Winner} from "../types";
 
 
 export function getFlippablePieces(board: State[], idx: number, player: Player): number[] {
@@ -91,4 +91,15 @@ export function evaluateBoard(board: State[], player: Player): number {
     }
 
     return playerScore - opponentScore;
+}
+
+export function findPossibleMoves(board: State[], currentTurn: Player): PossibleMove[] {
+    const possibleMoves: PossibleMove[] = [];
+    for (let i = 0; i < 64; i++) {
+        const piecesToFlip = getFlippablePieces(board, i, currentTurn);
+        if (piecesToFlip.length > 0) {
+            possibleMoves.push({ move: i, piecesToFlip });
+        }
+    }
+    return possibleMoves;
 }

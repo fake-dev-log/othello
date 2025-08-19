@@ -1,6 +1,14 @@
-import {calculateScore, determineWinner, getFlippablePieces, shouldPass, validateAndFlip} from "../logics";
-import type { Player, PossibleMove, State } from "../types";
+import {
+    calculateScore,
+    determineWinner,
+    findPossibleMoves,
+    getFlippablePieces,
+    shouldPass,
+    validateAndFlip
+} from "../logics";
+import type {Player, PossibleMove, State} from "../types";
 import {POSITIONAL_WEIGHTS, TIME_LIMIT} from "../constants";
+import {shallowSearch} from "./abPruning.ts";
 
 interface Node {
     parent: Node | null;
@@ -132,6 +140,86 @@ function rollout(node: Node) {
     }
 }
 
+function heavyRollout(node: Node) {
+    const player = node.player;
+    const board = node.board.slice();
+
+    let currentTurn = node.player;
+
+    while (!isGameOver(board)) {
+        const possibleMoves: PossibleMove[] = findPossibleMoves(board, currentTurn);
+
+        if (possibleMoves.length === 0) {
+            currentTurn = currentTurn === 'b' ? 'w' : 'b';
+            continue;
+        }
+
+        let bestMove: PossibleMove;
+
+        if (Math.random() > 0.2) {
+            bestMove = shallowSearch(board, possibleMoves, currentTurn, 2);
+        } else {
+            bestMove = selectMoveByWeight(possibleMoves);
+        }
+
+        const move = bestMove.move;
+        const piecesToFlip = bestMove.piecesToFlip;
+
+        board[move] = currentTurn;
+        piecesToFlip.forEach(p => board[p] = currentTurn);
+        currentTurn = currentTurn === 'b' ? 'w' : 'b';
+    }
+
+    const winner = determineWinner(calculateScore(board));
+
+    switch (winner) {
+        case "Draw": return 0;
+        case "Black": return player === 'b' ? 1 : -1;
+        case "White": return player === 'w' ? 1 : -1;
+    }
+}
+
+function adaptiveRollout(node: Node) {
+    const player = node.player;
+    const board = node.board.slice();
+    let currentTurn = node.player;
+
+    let moveCountInSim = 0;
+    const HEAVY_PHASE_MOVE_LIMIT = 10;
+
+    while (!isGameOver(board)) {
+        const possibleMoves: PossibleMove[] = findPossibleMoves(board, currentTurn);
+
+        if (possibleMoves.length === 0) {
+            currentTurn = currentTurn === 'b' ? 'w' : 'b';
+            continue;
+        }
+
+        let bestMove: PossibleMove;
+
+        if (moveCountInSim < HEAVY_PHASE_MOVE_LIMIT) {
+            bestMove = shallowSearch(board, possibleMoves, currentTurn, 1);
+        } else {
+            bestMove = selectMoveByWeight(possibleMoves);
+        }
+
+        const { move, piecesToFlip } = bestMove;
+        board[move] = currentTurn;
+        piecesToFlip.forEach(p => board[p] = currentTurn);
+
+        currentTurn = currentTurn === 'b' ? 'w' : 'b';
+        moveCountInSim++;
+    }
+
+    const winner = determineWinner(calculateScore(board));
+
+    switch (winner) {
+        case "Draw": return 0;
+        case "Black": return player === 'b' ? 1 : -1;
+        case "White": return player === 'w' ? 1 : -1;
+    }
+}
+
 function backPropagate(node: Node, value: number) {
     let tempNode: Node | null = node;
     while (tempNode !== null) {
@@ -166,7 +254,9 @@ export function findBestMove(board: State[], player: Player, start: number): num
                 node = node.children[0];
             }
         }
-        const value = rollout(node);
+        // const value = rollout(node);
+        // const value = heavyRollout(node);
+        const value = adaptiveRollout(node);
 
         backPropagate(node, value);
     }
