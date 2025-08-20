@@ -1225,7 +1225,7 @@ Rollout 정책을 개선하려는 일련의 시도들은 MCTS의 성능을 끌�
 
 또한 게임에 적용된 알고리즘을 강력한 IDDFS-αβ로 다시 변경하였다.
 
-### 부록: RAVE (Rapid Action Value Estimation)[^1]란?
+### 부록: RAVE (Rapid Action Value Estimation)[^5]란?
 
 RAVE는 MCTS의 성능을 극적으로 향상시키는 가장 유명하고 효과적인 기법 중 하나이다.
 
@@ -1241,4 +1241,4 @@ RAVE의 핵심 아이디어는 "시뮬레이션에서 나온 모든 좋은 수�
 
 ### 참고문헌
 
-[^1]: [Sylvain Gelly, David Silver, Monte-Carlo tree search and rapid action value estimation in computer Go, Artificial Intelligence, Volume 175, Issue 11, 2011, Pages 1856-1875](https://www.cs.utexas.edu/~pstone/Courses/394Rspring11/resources/mcrave.pdf)
+[^5]: [Sylvain Gelly, David Silver, Monte-Carlo tree search and rapid action value estimation in computer Go, Artificial Intelligence, Volume 175, Issue 11, 2011, Pages 1856-1875](https://www.cs.utexas.edu/~pstone/Courses/394Rspring11/resources/mcrave.pdf)
