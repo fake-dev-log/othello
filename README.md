@@ -22,6 +22,8 @@
 
 10. [Version 6. MCTS 강화: 가중치 기반 시뮬레이션 (Lightweight Rollout)](#version-6-mcts-강화-가중치-기반-시뮬레이션-lightweight-rollout)
 
+11. [Version 7. MCTS Rollout 심화 실험 및 한계 분석](#version-7-mcts-rollout-심화-실험-및-한계-분석)
+
 ## 프로젝트 개요
 
 이 프로젝트는 React와 TypeScript를 사용하여 만든 오셀로(리버시) 게임으로, Minimax 알고리즘을 기반으로 한 인공지능(AI)의 다양한 전략과 최적화 기법을 탐구한다.
@@ -1185,3 +1187,58 @@ function rollout(node: Node) {
 Version 6를 통해 MCTS의 시뮬레이션 단계에 간단한 휴리스틱을 추가하는 것만으로도 AI의 성능을 크게 향상시킬 수 있음을 확인했다.
 
 이제 MCTS가 IDDFS-αβ를 뛰어넘기 위해서는 정적인 위치 가중치에서 벗어나 시뮬레이션의 매 순간마다 실제 국면을 읽고 동적으로 판단하는 능력을 부여해야 한다. 이를 위해 다음 Version 7에서는 시뮬레이션의 각 단계에서 얕은 탐색을 수행하는 'Heavy Rollout' 기법을 구현하여 MCTS의 '직관'을 한 단계 더 발전시킬 것이다.
+
+
+## Version 7. MCTS Rollout 심화 실험 및 한계 분석
+
+### 1. Version 6의 한계와 동기
+
+[Version 6](#version-6-mcts-강화-가중치-기반-시뮬레이션-lightweight-rollout)에서는 위치 가중치를 활용한 'Lightweight Rollout'을 통해 MCTS의 성능을 크게 향상시킬 수 있었다. 하지만 이 방식은 게임의 현재 국면을 전혀 고려하지 않는 정적(Static) 휴리스틱이라는 한계가 있었다.
+
+따라서 Version 7의 목표는 시뮬레이션 중에 실제 국면을 동적으로 읽는 얕은 탐색(Shallow Search)을 Rollout에 결합하여 MCTS의 예측 정확도를 한 단계 더 끌어올리는 것이었다.
+
+### 2. 실험 설계: 다양한 Rollout 정책 테스트
+
+Rollout의 '지능'과 '비용(속도)' 사이의 최적점을 찾기 위해, 점진적으로 복잡해지는 세 가지 정책을 설계하고 IDDFS-αβ를 상대로 성능을 테스트했다.
+
+1. Heavy Rollout: 시뮬레이션의 모든 수를 깊이 2의 shallowSearch로 결정하는 정책.
+
+2. Adaptive Rollout: 시뮬레이션 초반 10수는 깊이 1의 shallowSearch로, 그 이후는 빠른 selectMoveByWeight로 전환하는 하이브리드 정책.
+
+3. Heuristic-Combined Rollout: Adaptive Rollout의 초반부 탐색에 위치 가중치 휴리스틱을 결합하여 단기적 이득과 장기적 가치를 함께 보도록 설계한 정책.
+
+### 3. 시뮬레이션 결과 및 분석
+
+| Rollout 정책         | MCTS 승률 (vs IDDFS-αβ) | 분석                                                                                            |
+|:-------------------|:----------------------|:----------------------------------------------------------------------------------------------|
+| Heavy Rollout      | 10% 미만                | 실패. 시뮬레이션 한 번이 너무 느려져 MCTS의 핵심인 '많은 시뮬레이션 횟수'를 확보하지 못하고 성능이 급락.                               |
+| Adaptive Rollout   | 20 ~ 40%              | 미묘한 실패. depth=1 탐색이 너무 근시안적이어서, 장기적으로 나쁜 수를 선택하는 경향을 보임. 이전의 'Lightweight Rollout'보다 오히려 약화됨. |
+| Heuristic-Combined | 15 ~ 30%              | 실패. 두 휴리스틱의 점수 규모(Scale)가 맞지 않아, 위치 가중치가 무시되고 여전히 근시안적인 탐색이 지배적.                              |
+
+실험 결과는 명확했다. Rollout 단계를 더 똑똑하게 만들려는 모든 시도가 오히려 MCTS를 더 약하게 만들었다. 얕은 탐색을 추가하는 비용이 시뮬레이션 횟수를 크게 감소시키는 부작용을 낳았고, 단순한 휴리스틱만으로는 IDDFS-αβ의 정교한 평가 함수를 따라갈 수 없었다.
+
+### 4. 종합 결론 및 새로운 방향: RAVE(Rapid Action Value Estimation)
+
+Rollout 정책을 개선하려는 일련의 시도들은 MCTS의 성능을 끌어올리는 데 실패했다. 이를 통해 중요한 교훈을 얻었다. Rollout을 무겁게 만들어 예측의 '질'을 조금 높이는 것보다, MCTS의 핵심 학습 메커니즘을 개선하여 '학습 효율' 자체를 높이는 것이 더 중요하다.
+
+이 결론에 따라 Rollout 정책 최적화를 잠시 멈추고, MCTS 알고리즘 자체를 근본적으로 강화하는 RAVE (Rapid Action Value Estimation) 를 다음 Version의 목표로 삼기로 결정했다.
+
+또한 게임에 적용된 알고리즘을 강력한 IDDFS-αβ로 다시 변경하였다.
+
+### 부록: RAVE (Rapid Action Value Estimation)[^1]란?
+
+RAVE는 MCTS의 성능을 극적으로 향상시키는 가장 유명하고 효과적인 기법 중 하나이다.
+
+RAVE의 핵심 아이디어는 "시뮬레이션에서 나온 모든 좋은 수는, 그게 어디서 나왔든 간에 일단 좋다고 기록해두자"는 것이다.
+
+- 기존 MCTS: 한 번의 시뮬레이션이 끝나면, 그 결과(승/패)는 역전파에 의해 오직 탐색 트리를 따라 내려온 경로상의 노드들에만 업데이트된다.
+
+- RAVE MCTS: 시뮬레이션 결과는 경로상의 노드들뿐만 아니라, 해당 시뮬레이션 과정(Rollout)에서 등장했던 모든 수(Action)에 대해서도 별도로 통계를 업데이트한다.
+
+기존의 역전파에 의해 경로상의 노드의 UTC만을 업데이트하는 것보다 Rollout에 포함된 다른 노드들에 대해 RAVE 점수를 업데이트 해야 하므로 약간 더 시간이 걸리게 된다.
+
+그러나 결과적으로 RAVE는 시뮬레이션 깊은 곳에서 우연히 발견된 좋은 수를 트리 전체의 다른 노드들이 더 빨리 알게 해줌으로써 MCTS의 학습 속도와 효율을 향상 시킨다.
+
+### 참고문헌
+
+[^1]: [Sylvain Gelly, David Silver, Monte-Carlo tree search and rapid action value estimation in computer Go, Artificial Intelligence, Volume 175, Issue 11, 2011, Pages 1856-1875](https://www.cs.utexas.edu/~pstone/Courses/394Rspring11/resources/mcrave.pdf)

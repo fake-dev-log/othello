@@ -8,7 +8,7 @@ import {
 } from "../logics";
 import type {Player, PossibleMove, State} from "../types";
 import {POSITIONAL_WEIGHTS, TIME_LIMIT} from "../constants";
-import {shallowSearch} from "./abPruning.ts";
+import {minimaxABRecursive, shallowSearch} from "./abPruning.ts";
 
 interface Node {
     parent: Node | null;
@@ -179,6 +179,26 @@ function heavyRollout(node: Node) {
     }
 }
 
+function shallowSearchWithHeuristic(board: State[], possibleMoves: PossibleMove[], player: Player, depth: number = 1): PossibleMove {
+    const opponent = player === 'b' ? 'w' : 'b';
+    const moveValueMap: { [move: number]: number } = {};
+    possibleMoves.forEach(({ move, piecesToFlip}) => {
+        board[move] = player;
+        piecesToFlip.forEach(p => board[p] = player);
+
+        const shallowValue = minimaxABRecursive(board, opponent, depth, -Infinity, Infinity, player);
+
+        board[move] = null;
+        piecesToFlip.forEach(p => board[p] = opponent);
+
+        const k = 0.8;
+        moveValueMap[move] = shallowValue + (POSITIONAL_WEIGHTS[move] * k);
+    });
+    possibleMoves.sort((a, b) => moveValueMap[b.move] - moveValueMap[a.move]);
+
+    return possibleMoves[0];
+}
+
 function adaptiveRollout(node: Node) {
     const player = node.player;
     const board = node.board.slice();
@@ -198,7 +218,7 @@ function adaptiveRollout(node: Node) {
         let bestMove: PossibleMove;
 
         if (moveCountInSim < HEAVY_PHASE_MOVE_LIMIT) {
-            bestMove = shallowSearch(board, possibleMoves, currentTurn, 1);
+            bestMove = shallowSearchWithHeuristic(board, possibleMoves, currentTurn, 1);
         } else {
             bestMove = selectMoveByWeight(possibleMoves);
         }

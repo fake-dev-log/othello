@@ -1,5 +1,5 @@
-import type {AiWorkerMessage} from "../types";
-import {findBestMove} from "../algorithms/mcts.ts";
+import type { AiWorkerMessage } from "../types";
+import { findBestMove } from "../algorithms/abPruning.ts";
 
 self.onmessage = (e: MessageEvent<AiWorkerMessage>) => {
   const { board, player } = e.data;

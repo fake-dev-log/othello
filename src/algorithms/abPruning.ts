@@ -2,7 +2,7 @@ import {TIME_LIMIT} from "../constants";
 import {calculateScore, evaluateBoard, findPossibleMoves, getFlippablePieces, shouldPass} from "../logics";
 import type {State, Player, PossibleMove} from "../types"
 
-function minimaxABRecursive(
+export function minimaxABRecursive(
     board: State[],
     player: Player,
     depth: number,

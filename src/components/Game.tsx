@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Board } from "./Board";
 import type { ScoreBoard, Player, State, Winner } from "../types";
 import { calculateScore, determineWinner, shouldPass, validateAndFlip } from "../logics";
@@ -80,7 +80,7 @@ export default function Game() {
 
     useEffect(() => {
         workerRef.current = new Worker(
-          new URL("../workers/mcts.ts", import.meta.url),
+          new URL("../workers/iddfsAb.ts", import.meta.url),
           {type: 'module'}
         );
 
