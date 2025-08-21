@@ -1,23 +1,31 @@
 import {
     calculateScore,
     determineWinner,
-    findPossibleMoves,
     getFlippablePieces,
     shouldPass,
     validateAndFlip
 } from "../logics";
 import type {Player, PossibleMove, State} from "../types";
-import {POSITIONAL_WEIGHTS, TIME_LIMIT} from "../constants";
-import {minimaxABRecursive, shallowSearch} from "./abPruning.ts";
+import {POSITIONAL_WEIGHTS, RAVE_EQUIVALENCE, TIME_LIMIT} from "../constants";
 
 interface Node {
     parent: Node | null;
     move: number | null;
     board: State[];
     player: Player;
+
     value: number;
     visit: number;
+
+    raveValue: number;
+    raveVisit: number;
+
     children: Node[];
+}
+
+interface RolloutResult {
+    value: number,
+    playedMoves: Set<number>;
 }
 
 function isGameOver(board: State[]): boolean {
@@ -39,8 +47,13 @@ function findNextChildren(node: Node): Node[] {
                 move: idx,
                 board: newBoard,
                 player: nextPlayer,
+
                 value: 0,
                 visit: 0,
+
+                raveValue: 0,
+                raveVisit: 0,
+
                 children: [],
             })
         }
@@ -57,10 +70,18 @@ function select(node: Node, explorationConstant = Math.SQRT2): Node {
             return child;
         }
 
-        // 부모 입장에서 자식(상태 차례)의 가치를 평가하므로 음수
-        const winRate = -child.value / child.visit;
+        const mctsWinRate = child.value / child.visit;
 
-        const ucb = winRate + explorationConstant * Math.sqrt(Math.log(node.visit) / child.visit)
+        let raveWinRate = 0.5;
+        if (child.raveVisit > 0) {
+            raveWinRate = child.raveValue / child.raveVisit;
+        }
+
+        const beta = Math.sqrt(RAVE_EQUIVALENCE / (3 * child.visit + RAVE_EQUIVALENCE));
+
+        const combinedWinRate = (1 - beta) * mctsWinRate + beta * raveWinRate;
+
+        const ucb = combinedWinRate + explorationConstant * Math.sqrt(Math.log(node.visit) / child.visit)
         
         if (bestChild === null || ucb > maxUcb) {
             bestChild = child;
@@ -101,11 +122,13 @@ function selectMoveByWeight(possibleMoves: PossibleMove[]): PossibleMove {
     return weightedMoves[weightedMoves.length - 1];
 }
 
-function rollout(node: Node) {
+function rollout(node: Node): RolloutResult {
     const player = node.player;
     const board = node.board.slice();
 
     let currentTurn = node.player;
+
+    const playedMoves = new Set<number>();
 
     while (!isGameOver(board)) {
         const possibleMoves: PossibleMove[] = [];
@@ -123,6 +146,8 @@ function rollout(node: Node) {
 
         // const { move, piecesToFlip } = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
         const { move, piecesToFlip } = selectMoveByWeight(possibleMoves);
+        playedMoves.add(move);
+
         const opponent = currentTurn === 'b' ? 'w' : 'b';
 
         board[move] = currentTurn;
@@ -132,119 +157,37 @@ function rollout(node: Node) {
     }
 
     const winner = determineWinner(calculateScore(board));
-
+    let value = 0;
     switch (winner) {
-        case "Draw": return 0;
-        case "Black": return player === 'b' ? 1 : -1;
-        case "White": return player === 'w' ? 1 : -1;
+        case "Draw": value = 0; break;
+        case "Black": value =  player === 'b' ? 1 : -1; break;
+        case "White": value = player === 'w' ? 1 : -1; break;
     }
+
+    return { value, playedMoves }
 }
 
-function heavyRollout(node: Node) {
-    const player = node.player;
-    const board = node.board.slice();
-
-    let currentTurn = node.player;
-
-    while (!isGameOver(board)) {
-        const possibleMoves: PossibleMove[] = findPossibleMoves(board, currentTurn);
-
-        if (possibleMoves.length === 0) {
-            currentTurn = currentTurn === 'b' ? 'w' : 'b';
-            continue;
-        }
-
-        let bestMove: PossibleMove;
-
-        if (Math.random() > 0.2) {
-            bestMove = shallowSearch(board, possibleMoves, currentTurn, 2);
-        } else {
-            bestMove = selectMoveByWeight(possibleMoves);
-        }
-
-        const move = bestMove.move;
-        const piecesToFlip = bestMove.piecesToFlip;
-
-        board[move] = currentTurn;
-        piecesToFlip.forEach(p => board[p] = currentTurn);
-        currentTurn = currentTurn === 'b' ? 'w' : 'b';
-    }
-
-    const winner = determineWinner(calculateScore(board));
-
-    switch (winner) {
-        case "Draw": return 0;
-        case "Black": return player === 'b' ? 1 : -1;
-        case "White": return player === 'w' ? 1 : -1;
-    }
-}
-
-function shallowSearchWithHeuristic(board: State[], possibleMoves: PossibleMove[], player: Player, depth: number = 1): PossibleMove {
-    const opponent = player === 'b' ? 'w' : 'b';
-    const moveValueMap: { [move: number]: number } = {};
-    possibleMoves.forEach(({ move, piecesToFlip}) => {
-        board[move] = player;
-        piecesToFlip.forEach(p => board[p] = player);
-
-        const shallowValue = minimaxABRecursive(board, opponent, depth, -Infinity, Infinity, player);
-
-        board[move] = null;
-        piecesToFlip.forEach(p => board[p] = opponent);
-
-        const k = 0.8;
-        moveValueMap[move] = shallowValue + (POSITIONAL_WEIGHTS[move] * k);
-    });
-    possibleMoves.sort((a, b) => moveValueMap[b.move] - moveValueMap[a.move]);
-
-    return possibleMoves[0];
-}
-
-function adaptiveRollout(node: Node) {
-    const player = node.player;
-    const board = node.board.slice();
-    let currentTurn = node.player;
-
-    let moveCountInSim = 0;
-    const HEAVY_PHASE_MOVE_LIMIT = 10;
-
-    while (!isGameOver(board)) {
-        const possibleMoves: PossibleMove[] = findPossibleMoves(board, currentTurn);
-
-        if (possibleMoves.length === 0) {
-            currentTurn = currentTurn === 'b' ? 'w' : 'b';
-            continue;
-        }
-
-        let bestMove: PossibleMove;
-
-        if (moveCountInSim < HEAVY_PHASE_MOVE_LIMIT) {
-            bestMove = shallowSearchWithHeuristic(board, possibleMoves, currentTurn, 1);
-        } else {
-            bestMove = selectMoveByWeight(possibleMoves);
-        }
-
-        const { move, piecesToFlip } = bestMove;
-        board[move] = currentTurn;
-        piecesToFlip.forEach(p => board[p] = currentTurn);
-
-        currentTurn = currentTurn === 'b' ? 'w' : 'b';
-        moveCountInSim++;
-    }
-
-    const winner = determineWinner(calculateScore(board));
-
-    switch (winner) {
-        case "Draw": return 0;
-        case "Black": return player === 'b' ? 1 : -1;
-        case "White": return player === 'w' ? 1 : -1;
-    }
-}
-
-function backPropagate(node: Node, value: number) {
+function backPropagate(node: Node, result: RolloutResult) {
+    const { value, playedMoves } = result;
     let tempNode: Node | null = node;
     while (tempNode !== null) {
-        tempNode.value += value;
+        // tempNode.player는 해당 노드에서 수를 둘 플레이어를 의미.
+        // value는 자식 노드(node)의 관점에서 계산되었으므로,
+        // 부모 노드(tempNode)의 value를 업데이트할 때는 부호를 뒤집어주어야 함
+        tempNode.value -= value;
         tempNode.visit++;
+
+        for (const child of tempNode.children) {
+            // 만약 자식의 수가 이번 시뮬레이션에 등장했다면
+            if (playedMoves.has(child.move!)) {
+                // child.player는 child 노드에서 수를 둘 플레이어.
+                // value는 자식 노드(node)의 관점에서 계산.
+                // child.player와 node.player는 같으므로 부호를 그대로 사용.
+                child.raveValue += value;
+                child.raveVisit++;
+            }
+        }
+
         tempNode = tempNode.parent;
     }
 }
@@ -255,8 +198,13 @@ export function findBestMove(board: State[], player: Player, start: number): num
         move: null,
         board: board,
         player: player,
+
         value: 0,
         visit: 0,
+
+        raveValue: 0,
+        raveVisit: 0,
+
         children: [],
     }
     while (performance.now() - start < TIME_LIMIT) {
@@ -274,11 +222,10 @@ export function findBestMove(board: State[], player: Player, start: number): num
                 node = node.children[0];
             }
         }
-        // const value = rollout(node);
-        // const value = heavyRollout(node);
-        const value = adaptiveRollout(node);
 
-        backPropagate(node, value);
+        const result = rollout(node);
+
+        backPropagate(node, result);
     }
 
     let bestMove: number | null = null;
