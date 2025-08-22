@@ -1237,7 +1237,7 @@ RAVE의 핵심 아이디어는 "시뮬레이션에서 나온 모든 좋은 수�
 
 - RAVE MCTS: 시뮬레이션 결과는 경로상의 노드들뿐만 아니라, 해당 시뮬레이션 과정(Rollout)에서 등장했던 모든 수(Action)에 대해서도 별도로 통계를 업데이트한다.
 
-기존의 역전파에 의해 경로상의 노드의 UTC만을 업데이트하는 것보다 Rollout에 포함된 다른 노드들에 대해 RAVE 점수를 업데이트 해야 하므로 약간 더 시간이 걸리게 된다.
+기존의 역전파에 의해 경로상의 노드의 UCT만을 업데이트하는 것보다 Rollout에 포함된 다른 노드들에 대해 RAVE 점수를 업데이트 해야 하므로 약간 더 시간이 걸리게 된다.
 
 그러나 결과적으로 RAVE는 시뮬레이션 깊은 곳에서 우연히 발견된 좋은 수를 트리 전체의 다른 노드들이 더 빨리 알게 해줌으로써 MCTS의 학습 속도와 효율을 향상 시킨다.
 
@@ -1249,9 +1249,9 @@ RAVE의 핵심 아이디어는 "시뮬레이션에서 나온 모든 좋은 수�
 
 ### 1. Version 7의 한계와 동기
 
-[Version 7](#version-7-mcts-rollout-심화-실험-및-한계-분석)에서 Rollout 정책 개선이 한계에 부딪히면서 MCTS의 핵심 학습 메커니즘을 강화하는 RAVE를 도입했다. 하지만 RAVE의 성능은 MCTS의 현재 시뮬레이션 결과와 이전의 시뮬레이션에서 갱신된 RAVE 점수 사이의 균형을 어떻게 맞추느냐에 따라 크게 달라진다.
+[Version 7](#version-7-mcts-rollout-심화-실험-및-한계-분석)에서 Rollout 정책 개선이 한계에 부딪혔다. 이를 해결하기 위해 MCTS의 핵심 학습 메커니즘을 강화하는 RAVE를 도입했다. 하지만 RAVE의 성능은 MCTS의 현재 시뮬레이션 결과와 이전의 시뮬레이션에서 갱신된 RAVE 점수 사이의 균형을 어떻게 맞추느냐에 따라 크게 달라진다.
 
-$$\text{UTC-RAVE}:\; Q_{\star}^{\oplus}=Q_{\star}+c\sqrt{\frac{\log{N(s)}}{N(s,a)}}$$
+$$\text{UCT-RAVE}:\; Q_{\star}^{\oplus}=Q_{\star}+c\sqrt{\frac{\log{N(s)}}{N(s,a)}}$$
 
 $$Q_{\star}(s,a)=(1-\beta(s,a))Q(s,a)+\beta(s,a)\tilde{Q}(s,a)$$
 
@@ -1259,13 +1259,242 @@ $$\beta(s,a)=\sqrt{\frac{k}{3N(s)+k}}$$
 
 이 균형을 조절하는 핵심 파라미터가 바로 위 식의 k이다. Version 8의 목표는 이 k값을 체계적으로 바꿔가며 현재의 MCTS AI에 가장 적합한 최적의 균형점을 찾는 것이다.
 
-### 2. 실험 설계
+## 2. RAVE 구현
+
+RAVE를 적용하기 위해 Node의 형태를 바꿔준다.
+
+<details>
+<summary> Node 수정 코드 보기 (Click to expand) </summary>
+
+```typescript
+interface Node {
+    parent: Node | null;
+    move: number | null;
+    board: State[];
+    player: Player;
+
+    value: number;
+    visit: number;
+	// Node에 다음 내용을 추가한다.
+  	// rave 값과, rave에 따른 방문 횟수를 추가한다.
+    raveValue: number;
+    raveVisit: number;
+
+    children: Node[];
+}
+```
+
+</details>
+
+
+이후 MCTS의 선택(Select) 함수에 UCT-RAVE를 적용한다.
+
+<details>
+<summary> select 수정 코드 보기 (Click to expand) </summary>
+
+```typescript
+function select(node: Node, explorationConstant = Math.SQRT2): Node {
+    let bestChild: Node | null = null;
+    let maxUcb = -Infinity;
+
+    for (const child of node.children) {
+        if (child.visit === 0) {
+            return child;
+        }
+
+        // 기존에 음수화 했던 child의 승률값을 계산의 편의를 위해 원래대로 되돌린다.
+        // 대신 음수화 과정은 backpropagate에서 처리한다.
+        const mctsWinRate = child.value / child.visit;
+
+        let raveWinRate = 0.5;
+        // rave 승률을 계산한다.
+        if (child.raveVisit > 0) {
+            raveWinRate = child.raveValue / child.raveVisit;
+        }
+
+        // 베타의 정의에 따라 베타 값을 초기화한다.
+        // RAVE_EQUIVALENCE가 k값을 의미하며, 이를 변화시키며 성능 변화를 추적할 수 있다.
+        const beta = Math.sqrt(RAVE_EQUIVALENCE / (3 * child.visit + RAVE_EQUIVALENCE));
+
+        const combinedWinRate = (1 - beta) * mctsWinRate + beta * raveWinRate;
+
+        const ucb = combinedWinRate + explorationConstant * Math.sqrt(Math.log(node.visit) / child.visit)
+        
+        if (bestChild === null || ucb > maxUcb) {
+            bestChild = child;
+            maxUcb = ucb;
+        }
+    }
+
+    return bestChild!;
+}
+```
+
+</details>
+
+시뮬레이션(Rollout) 함수도 RAVE를 반영할 수 있도록 착수점 전체를 기록해서 전달한다.
+
+<details>
+<summary> rollout 수정 코드 보기 (Click to expand) </summary>
+
+```typescript
+// 새로운 반환 타입을 지정한다.
+interface RolloutResult {
+    value: number,
+    playedMoves: Set<number>; // 착수점의 중복을 피하기 위해 집합으로 관리한다.
+}
+
+// rollout 함수
+function rollout(node: Node): RolloutResult {
+    const player = node.player;
+    const board = node.board.slice();
+
+    let currentTurn = node.player;
+
+    // 착수점을 저장할 집합(Set)을 선언한다.
+    const playedMoves = new Set<number>();
+
+    // 게임을 시뮬레이션 한다.
+    while (!isGameOver(board)) {
+        const possibleMoves: PossibleMove[] = [];
+        for (let i = 0; i < 64; i++) {
+            const piecesToFlip = getFlippablePieces(board, i, currentTurn);
+            if (piecesToFlip.length > 0) {
+                possibleMoves.push({ move: i, piecesToFlip });
+            }
+        }
+
+        if (possibleMoves.length === 0) {
+            currentTurn = currentTurn === 'b' ? 'w' : 'b';
+            continue;
+        }
+
+        const { move, piecesToFlip } = selectMoveByWeight(possibleMoves);
+        // 선택된 착수점을 집합에 추가한다.
+        playedMoves.add(move);
+
+        const opponent = currentTurn === 'b' ? 'w' : 'b';
+
+        board[move] = currentTurn;
+        piecesToFlip.forEach(p => board[p] = currentTurn);
+
+        currentTurn = opponent;
+    }
+
+    const winner = determineWinner(calculateScore(board));
+    let value = 0;
+    switch (winner) {
+        case "Draw": value = 0; break;
+        case "Black": value =  player === 'b' ? 1 : -1; break;
+        case "White": value = player === 'w' ? 1 : -1; break;
+    }
+
+    // 시뮬레이션으로 구한 가치와 착수점들의 집합을 반환한다.
+    return { value, playedMoves }
+}
+```
+</details>
+
+역전파(Back propagation) 과정에서 RAVE 점수를 해당하는 자식노드에 추가해준다.
+
+<details>
+<summary> backPropagate 수정 코드 보기 (Click to expand) </summary>
+
+```typescript
+function backPropagate(node: Node, result: RolloutResult) {
+    const { value, playedMoves } = result;
+    let tempNode: Node | null = node;
+    while (tempNode !== null) {
+        // tempNode.player는 해당 노드에서 수를 둘 플레이어를 의미한다.
+        // value는 자식 노드(node)의 관점에서 계산되었으므로,
+        // 부모 노드(tempNode)의 value를 업데이트할 때는 부호를 뒤집어주어야 한다.
+        tempNode.value -= value;
+        tempNode.visit++;
+
+        for (const child of tempNode.children) {
+            // 만약 자식의 수가 이번 시뮬레이션에 등장했다면 RAVE 점수를 업데이트 한다.
+            if (playedMoves.has(child.move!)) {
+                // child.player는 child 노드에서 수를 둘 플레이어이다.
+                // value는 자식 노드(node)의 관점에서 계산한다.
+                // child.player와 node.player는 같으므로 부호를 그대로 사용한다.
+                child.raveValue += value;
+                child.raveVisit++;
+            }
+        }
+
+        tempNode = tempNode.parent;
+    }
+}
+```
+
+</details>
+
+최종적으로 가장 유망한(또는 강건한) 자식을 선택한다.
+
+<details>
+<summary> findBestMove 수정 코드 보기 (Click to expand) </summary>
+
+```typescript
+function findBestMove(board: State[], player: Player, start: number): number | null {
+    const root: Node = {
+        parent: null,
+        move: null,
+        board: board,
+        player: player,
+
+        value: 0,
+        visit: 0,
+
+        raveValue: 0,
+        raveVisit: 0,
+
+        children: [],
+    }
+    while (performance.now() - start < TIME_LIMIT) {
+        let node: Node = root;
+
+        while (node.children.length > 0 && !isGameOver(node.board)) {
+            // 선택 과정에서 RAVE가 반영된 UCB로 최적의 자식 노드를 선택한다.
+            node = select(node);
+        }
+
+        if (!isGameOver(node.board)) {
+            if (node.children.length === 0) {
+                node.children = findNextChildren(node);
+            }
+            if (node.children.length > 0) {
+                node = node.children[0];
+            }
+        }
+
+        const result = rollout(node);
+		
+        // 이 과정에서 RAVE 점수가 반영된다.
+        backPropagate(node, result);
+    }
+
+    let bestMove: number | null = null;
+    let maxVisit = -1;
+    for (const child of root.children) {
+      if (child.visit > maxVisit) {
+        maxVisit = child.visit;
+        bestMove = child.move;
+      }
+    }
+
+    return bestMove;
+}
+```
+
+</details>
+
+### 3. 실험 설계
 
 k값은 RAVE 점수가 몇 번의 시뮬레이션 결과와 동등한 가치를 갖는지를 의미한다. k가 클수록 AI는 RAVE 점수를 더 오래 신뢰하게 된다.
 
 k값을 1, 5, 10, 20, 50, 100으로 변경해가며, 각 값에 대해 IDDFS-αβ를 상대로 180게임의 시뮬레이션을 진행하였다.
 
-### 3. 시뮬레이션 결과 및 분석
+### 4. 시뮬레이션 결과 및 분석
 
 | RAVE Equivalence (k) | 총 게임 수 | RAVE MCTS 승리 | IDDFS 승리 | RAVE MCTS 승률 |
 |:---------------------|:-------|:-------------|:---------|:-------------|
@@ -1280,17 +1509,17 @@ k값을 1, 5, 10, 20, 50, 100으로 변경해가며, 각 값에 대해 IDDFS-α�
 
 실험 결과는 일정한 패턴을 보였다. k값이 커질수록(RAVE 점수를 신뢰할수록), MCTS의 승률은 꾸준히 하락했다.
 
-가장 높은 승률(30.8%)은 k=1이라는 가장 작은 값에서 나왔다. 이는 AI에게 RAVE 점수는 탐색 초반에 방향을 잡아주는 최소한의 가이드 역할만 할 때 가장 효과적이며, 그 이후에는 빠르게 자신의 시뮬레이션에 따른 통계치를 신뢰하는 것이 더 나은 전략임을 의미한다.
+가장 높은 승률(29.4%)은 k=1이라는 가장 작은 값에서 나왔다. 이는 AI에게 RAVE 점수는 탐색 초반에 방향을 잡아주는 최소한의 가이드 역할만 할 때 가장 효과적이며, 그 이후에는 빠르게 자신의 시뮬레이션에 따른 통계치를 신뢰하는 것이 더 나은 전략임을 의미한다.
 
 #### 나. 원인 분석: 오셀로 게임의 특성
 
 이 현상은 오셀로 게임의 '비정상성(Non-stationarity)' 때문일 가능성이 높다. RAVE의 기본 가정은 "좋은 수는 어떤 상황에서든 대체로 좋다"는 것이다. 하지만 오셀로에서는 게임의 국면에 따라 특정 수의 가치가 극적으로 변한다.
 
-예를 들어 바둑의 경우에는 초반에 둔 좋은 포석이 중, 후반까지 계속해서 강력한 힘을 발휘한다. 반면 오셀로에서는 초반에 좋은 포석을 위한 수가 중반 난전에서는 나쁜 수가 될 수 있다. 이는 오셀로의 규칙 자체가 내가 둔 돌이 상대편의 돌이 되어 나를 공격하는데 사용된다는 점에서 기인한다.
+예를 들어 바둑의 경우에는 초반에 둔 좋은 포석이 중, 후반까지 계속해서 강력한 힘을 발휘한다. 반면 오셀로에서는 초반에 좋은 포석을 위한 수가 중반 난전에서는 나쁜 수가 될 수 있다. 이는 오셀로의 규칙 자체가, 내가 둔 돌이 상대편의 돌이 되어 나를 공격하는데 사용된다는 점에서 기인한다.
 
 k값을 높이는 것은 AI에게 "국면을 무시하고 일반적인 평판을 더 믿어라"라고 강요하는 것과 같다. 따라서 AI는 현재 상황에 맞는 최적의 수를 찾기보다, 다른 게임에서 좋았던 '인기 있는' 수를 두려다가 패배하게 되는 것이다.
 
-## 4. 종합 결론
+### 4. 종합 결론
 
 Version 1부터 8까지의 여정을 통해 두 가지 서로 다른 패러다임의 AI를 개발하고 실험을 통해 그 성능을 끌어올리기 위해 노력했다.
 

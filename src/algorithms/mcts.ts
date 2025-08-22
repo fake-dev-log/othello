@@ -229,13 +229,13 @@ export function findBestMove(board: State[], player: Player, start: number): num
     }
 
     let bestMove: number | null = null;
-        let maxVisit = -1;
-        for (const child of root.children) {
-            if (child.visit > maxVisit) {
-                maxVisit = child.visit;
-                bestMove = child.move;
-            }
+    let maxVisit = -1;
+    for (const child of root.children) {
+        if (child.visit > maxVisit) {
+            maxVisit = child.visit;
+            bestMove = child.move;
         }
+    }
 
     return bestMove;
 }
